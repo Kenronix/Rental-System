@@ -8,7 +8,6 @@
 // App.vue is the root component
 // It will render whatever route is active via router-view
 </script>
-
 <style>
 * {
   margin: 0;
@@ -21,3 +20,4 @@
   min-height: 100vh;
 }
 </style>
+
