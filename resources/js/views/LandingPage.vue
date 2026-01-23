@@ -1,27 +1,47 @@
 <script setup>
+import { ref } from 'vue'
 import landingPageImage from '../images/landingPage.png'
 import tahananLogo from '../images/tahananLogo.png'
 import tahananLogoName from '../images/tahananLogoName.png'
+import LoginButton from '../components/auth/LoginButton.vue'
+import LoginModal from '../components/auth/LoginModal.vue'
+
+const showLoginModal = ref(false)
+
+const openLoginModal = () => {
+  showLoginModal.value = true
+}
+
+const closeLoginModal = () => {
+  showLoginModal.value = false
+}
 </script>
 
 <template>
-  <div class="login-container" :style="{ backgroundImage: `url(${landingPageImage})` }">
+  <div class="landing-container" :style="{ backgroundImage: `url(${landingPageImage})` }">
     <div class="logo-container">
       <img :src="tahananLogo" alt="Tahanan Logo" class="tahanan-logo">
       <img :src="tahananLogoName" alt="Tahanan Logo Name" class="tahanan-logo-name">
     </div>
-    <div class="login-content-text">
+
+    
+    <div class="landing-content-text">
         <p>Manage Your <span class="gradient-text">Rental Properties</span></p>
-        <p>With Ease and Confidence</p>
+        <p>With Ease and Confidence.</p>
+        
+        <!-- Center Login Button with Arrow -->
+        <LoginButton variant="center" show-arrow text="Login" @click="openLoginModal" />
     </div>
+    
+    <!-- Login Modal -->
+    <LoginModal :show="showLoginModal" @close="closeLoginModal" />
   </div>
 </template>
-
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 
-.login-container {
+.landing-container {
   width: 100vw;
   height: 100vh;
   background-size: cover;
@@ -55,7 +75,7 @@ import tahananLogoName from '../images/tahananLogoName.png'
   margin-top: 30px;
 }
 
-.login-content-text {
+.landing-content-text {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -66,14 +86,14 @@ import tahananLogoName from '../images/tahananLogoName.png'
   white-space: nowrap;
 }
 
-.login-content-text p {
+.landing-content-text p {
   margin: 0;
   font-weight: bold;
   font-size: 70px;
 
 }
 
-.login-content-text p:first-child::after {
+.landing-content-text p:first-child::after {
   content: ' ';
 }
 
@@ -82,5 +102,6 @@ import tahananLogoName from '../images/tahananLogoName.png'
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-}   
+}
 </style>
+
