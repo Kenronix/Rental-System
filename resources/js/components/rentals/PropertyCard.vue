@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { BuildingOfficeIcon, UsersIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -11,6 +11,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const route = useRoute()
 const imageError = ref(false)
 
 const handleImageError = (event) => {
@@ -25,7 +26,10 @@ const handleImageLoad = () => {
 }
 
 const handleViewDetails = () => {
-  router.push(`/landlord/prop-${props.property.id}`)
+  // Determine route prefix based on current route
+  const isAdmin = route.path.startsWith('/admin')
+  const prefix = isAdmin ? '/admin/prop' : '/landlord/prop'
+  router.push(`${prefix}-${props.property.id}`)
 }
 </script>
 

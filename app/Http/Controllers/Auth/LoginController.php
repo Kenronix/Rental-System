@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Landlord;
 use App\Models\Tenant;
+use App\Models\Admin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -103,8 +104,21 @@ class LoginController extends Controller
      */
     public function user(Request $request)
     {
+        $admin = Auth::guard('admin')->user();
         $landlord = Auth::guard('landlord')->user();
         $tenant = Auth::guard('tenant')->user();
+
+        if ($admin) {
+            return response()->json([
+                'authenticated' => true,
+                'userType' => 'admin',
+                'user' => [
+                    'id' => $admin->id,
+                    'name' => $admin->name,
+                    'email' => $admin->email,
+                ],
+            ]);
+        }
 
         if ($landlord) {
             return response()->json([
@@ -142,7 +156,8 @@ class LoginController extends Controller
      */
     public function logout(Request $request)
     {
-        // Logout from both guards
+        // Logout from all guards
+        Auth::guard('admin')->logout();
         Auth::guard('landlord')->logout();
         Auth::guard('tenant')->logout();
         $request->session()->invalidate();

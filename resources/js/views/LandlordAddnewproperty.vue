@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Sidebar from '../components/layout/Sidebar.vue'
+import AdminSidebar from '../components/layout/AdminSidebar.vue'
 import api from '../services/api.js'
 import { 
   HomeIcon, 
@@ -16,6 +17,7 @@ import {
 
 const router = useRouter()
 const route = useRoute()
+const isAdmin = computed(() => route.path.startsWith('/admin'))
 
 const isEditMode = computed(() => route.name === 'EditProperty' && route.params.id)
 const propertyId = computed(() => isEditMode.value ? route.params.id : null)
@@ -96,7 +98,8 @@ const goToPreviousStep = () => {
   if (currentStep.value > 1) {
     currentStep.value--
   } else {
-    router.push('/landlord/properties')
+    const redirectPath = isAdmin.value ? '/admin/properties' : '/landlord/properties'
+    router.push(redirectPath)
   }
 }
 
@@ -282,7 +285,8 @@ const loadPropertyForEdit = async () => {
   } catch (error) {
     console.error('Error loading property:', error)
     alert('Failed to load property data. Please try again.')
-    router.push('/landlord/properties')
+    const redirectPath = isAdmin.value ? '/admin/properties' : '/landlord/properties'
+    router.push(redirectPath)
   } finally {
     isLoadingProperty.value = false
   }
@@ -377,7 +381,8 @@ const submitProperty = async () => {
 
       if (response.data.success) {
         alert('Property created successfully!')
-        router.push('/landlord/properties')
+        const redirectPath = isAdmin.value ? '/admin/properties' : '/landlord/properties'
+    router.push(redirectPath)
       } else {
         alert('Failed to create property. Please try again.')
       }
@@ -404,7 +409,8 @@ onMounted(() => {
 
 <template>
   <div class="dashboard-layout">
-    <Sidebar />
+    <AdminSidebar v-if="isAdmin" />
+    <Sidebar v-else />
     <div class="main-content">
       <!-- Header -->
       <div class="page-header">
