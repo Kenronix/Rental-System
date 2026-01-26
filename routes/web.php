@@ -32,6 +32,18 @@ Route::put('/api/tenant-applications/{id}/reject', [App\Http\Controllers\TenantA
 // API Routes for tenants (landlord only)
 Route::get('/api/tenants', [App\Http\Controllers\TenantController::class, 'index']);
 Route::get('/api/tenants/{id}', [App\Http\Controllers\TenantController::class, 'show']);
+Route::delete('/api/tenants/{id}', [App\Http\Controllers\TenantController::class, 'destroy']);
+Route::post('/api/tenants/{id}/generate-account', [App\Http\Controllers\TenantController::class, 'generateAccount']);
+
+// API Routes for payments (landlord only)
+Route::get('/api/payments', [App\Http\Controllers\PaymentController::class, 'index']);
+Route::post('/api/payments', [App\Http\Controllers\PaymentController::class, 'store']);
+Route::put('/api/payments/{id}', [App\Http\Controllers\PaymentController::class, 'update']);
+Route::delete('/api/payments/{id}', [App\Http\Controllers\PaymentController::class, 'destroy']);
+
+// API Routes for reports (landlord only)
+Route::get('/api/reports', [App\Http\Controllers\ReportController::class, 'index']);
+Route::get('/api/reports/download', [App\Http\Controllers\ReportController::class, 'download']);
 
 // Catch-all route for Vue.js SPA
 Route::get('/{any}', function () {
