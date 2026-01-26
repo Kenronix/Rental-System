@@ -3,12 +3,14 @@ import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import Sidebar from '../components/layout/Sidebar.vue'
 import PropertyCard from '../components/rentals/PropertyCard.vue'
-import { PlusIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/solid'
+import { PlusIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/vue/24/solid'
+import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 import api from '../services/api.js'
 
 const router = useRouter()
 
-const selectedFilter = ref('All')
+const searchQuery = ref('')
+const propertyTypeFilter = ref('All')
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const allProperties = ref([])
@@ -53,20 +55,45 @@ onActivated(() => {
   fetchProperties()
 })
 
+const filteredProperties = computed(() => {
+  let filtered = allProperties.value
+  
+  // Filter by property type
+  if (propertyTypeFilter.value !== 'All') {
+    filtered = filtered.filter((p) => {
+      const type = (p.type || '').toLowerCase()
+      return type === propertyTypeFilter.value.toLowerCase()
+    })
+  }
+  
+  // Filter by search query
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    filtered = filtered.filter((p) => {
+      const name = (p.name || '').toLowerCase()
+      const location = (p.location || '').toLowerCase()
+      const type = (p.type || '').toLowerCase()
+      return name.includes(q) || location.includes(q) || type.includes(q)
+    })
+  }
+  
+  return filtered
+})
+
 const totalPages = computed(() => {
-  return Math.ceil(allProperties.value.length / itemsPerPage.value)
+  return Math.max(1, Math.ceil(filteredProperties.value.length / itemsPerPage.value))
 })
 
 const properties = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   const end = start + itemsPerPage.value
-  return allProperties.value.slice(start, end)
+  return filteredProperties.value.slice(start, end)
 })
 
 const paginationInfo = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value + 1
-  const end = Math.min(currentPage.value * itemsPerPage.value, allProperties.value.length)
-  const total = allProperties.value.length
+  const end = Math.min(currentPage.value * itemsPerPage.value, filteredProperties.value.length)
+  const total = filteredProperties.value.length
   return { start, end, total }
 })
 
@@ -91,6 +118,14 @@ const goToPage = (page) => {
     currentPage.value = page
   }
 }
+
+const resetToFirstPage = () => {
+  currentPage.value = 1
+}
+
+const handleFilterChange = () => {
+  resetToFirstPage()
+}
 </script>
 
 <template>
@@ -104,14 +139,25 @@ const goToPage = (page) => {
 
       <!-- Action Bar -->
       <div class="action-bar">
-        <div class="filter-container">
-          <select v-model="selectedFilter" class="filter-dropdown">
-            <option value="All">All</option>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
-            <option value="Vacant">Vacant</option>
-          </select>
-          <ChevronDownIcon class="chevron-icon" />
+        <div class="filters-container">
+          <div class="search-container">
+            <MagnifyingGlassIcon class="search-icon" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="search-input"
+              placeholder="Search property..."
+              @input="resetToFirstPage"
+            />
+          </div>
+          <div class="filter-container">
+            <select v-model="propertyTypeFilter" class="filter-dropdown" @change="handleFilterChange">
+              <option value="All">All Types</option>
+              <option value="Residential">Residential</option>
+              <option value="Commercial">Commercial</option>
+            </select>
+            <ChevronDownIcon class="chevron-icon" />
+          </div>
         </div>
         <button class="add-property-btn" @click="handleAddProperty">
           <PlusIcon class="plus-icon" />
@@ -132,7 +178,10 @@ const goToPage = (page) => {
 
       <!-- Empty State -->
       <div v-else-if="properties.length === 0" class="empty-state">
-        <p>No properties found. Click "Add Property" to create your first property.</p>
+        <p v-if="searchQuery.trim()">
+          No properties match "{{ searchQuery.trim() }}". Try a different search.
+        </p>
+        <p v-else>No properties found. Click "Add Property" to create your first property.</p>
       </div>
 
       <!-- Properties Grid -->
@@ -214,6 +263,53 @@ const goToPage = (page) => {
   margin-bottom: 32px;
 }
 
+.filters-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 14px;
+  width: 20px;
+  height: 20px;
+  color: #999;
+  pointer-events: none;
+}
+
+.search-input {
+  padding: 12px 16px 12px 44px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  min-width: 260px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+.search-input:hover {
+  border-color: #bbb;
+}
+
+.search-input:focus {
+  border-color: #1500FF;
+}
+
 .filter-container {
   position: relative;
   display: inline-block;
@@ -230,7 +326,7 @@ const goToPage = (page) => {
   font-weight: 500;
   color: #333;
   cursor: pointer;
-  min-width: 120px;
+  min-width: 150px;
   outline: none;
   transition: border-color 0.2s;
 }
