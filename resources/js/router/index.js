@@ -10,6 +10,11 @@ import LandlordTenants from '../views/LandlordTenants.vue'
 import LandlordPayments from '../views/LandlordPayments.vue'
 import LandlordReports from '../views/LandlordReports.vue'
 import TenantDashboard from '../views/TenantDashboard.vue'
+import TenantRental from '../views/TenantRental.vue'
+import TenantUtilities from '../views/TenantUtilities.vue'
+import TenantPayments from '../views/TenantPayments.vue'
+import TenantReports from '../views/TenantReports.vue'
+import TenantAccountSettings from '../views/TenantAccountSettings.vue'
 import TenantApplicationForm from '../views/TenantApplicationForm.vue'
 import { useAuth } from '../composables/useAuth.js'
 
@@ -90,6 +95,36 @@ const routes = [
     path: '/tenant/dashboard',
     name: 'TenantDashboard',
     component: TenantDashboard,
+    meta: { requiresAuth: true, userType: 'tenant' }
+  },
+  {
+    path: '/tenant/rental',
+    name: 'TenantRental',
+    component: TenantRental,
+    meta: { requiresAuth: true, userType: 'tenant' }
+  },
+  {
+    path: '/tenant/utilities',
+    name: 'TenantUtilities',
+    component: TenantUtilities,
+    meta: { requiresAuth: true, userType: 'tenant' }
+  },
+  {
+    path: '/tenant/payments',
+    name: 'TenantPayments',
+    component: TenantPayments,
+    meta: { requiresAuth: true, userType: 'tenant' }
+  },
+  {
+    path: '/tenant/reports',
+    name: 'TenantReports',
+    component: TenantReports,
+    meta: { requiresAuth: true, userType: 'tenant' }
+  },
+  {
+    path: '/tenant/account-settings',
+    name: 'TenantAccountSettings',
+    component: TenantAccountSettings,
     meta: { requiresAuth: true, userType: 'tenant' }
   },
   {
