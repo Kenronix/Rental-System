@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '../components/layout/Sidebar.vue'
 import { 
   ArrowLeftIcon,
-  PencilIcon
+  PencilIcon,
+  PlusIcon
 } from '@heroicons/vue/24/outline'
 import api from '../services/api.js'
 
@@ -60,6 +61,13 @@ const handleBack = () => {
 
 const handleEditUnit = () => {
   router.push(`/landlord/prop-${route.params.id}/units/${route.params.unitId}/edit`)
+}
+
+const handleAddTenant = () => {
+  // Navigate to tenant application form or tenant management
+  // For now, navigate to the unit's application link
+  const unitId = route.params.unitId
+  router.push(`/units/${unitId}/apply`)
 }
 
 const selectImage = (index) => {
@@ -262,7 +270,17 @@ onMounted(() => {
 
           <!-- Tenants Information Section -->
           <div class="tenants-section">
-            <h2 class="tenants-title">Tenants Information</h2>
+            <div class="tenants-header">
+              <h2 class="tenants-title">Tenants Information</h2>
+              <button 
+                v-if="!unit.tenant"
+                @click="handleAddTenant"
+                class="add-tenant-button"
+              >
+                <PlusIcon class="button-icon" />
+                <span>Add Tenant</span>
+              </button>
+            </div>
             <div v-if="unit.tenant" class="tenants-card">
               <div class="tenant-info">
                 <div class="tenant-avatar">
@@ -612,11 +630,37 @@ onMounted(() => {
   padding: 32px;
 }
 
+.tenants-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
 .tenants-title {
   font-size: 24px;
   font-weight: 700;
   color: #111827;
-  margin: 0 0 24px 0;
+  margin: 0;
+}
+
+.add-tenant-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #1500FF;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.add-tenant-button:hover {
+  background: #1200e6;
 }
 
 .tenants-card {

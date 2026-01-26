@@ -54,4 +54,12 @@ class Tenant extends Authenticatable
     {
         return $this->hasMany(Unit::class);
     }
+
+    /**
+     * Get the tenant applications for this tenant (by email).
+     */
+    public function applications(): HasMany
+    {
+        return $this->hasMany(TenantApplication::class, 'email', 'email');
+    }
 }

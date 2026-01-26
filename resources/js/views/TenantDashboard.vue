@@ -146,144 +146,31 @@ onMounted(() => {
   <div class="dashboard-layout">
     <TenantSidebar />
     <div class="main-content">
-      <!-- Page Title -->
-      <h1 class="page-title">Dashboard</h1>
-
-      <!-- Loading State -->
-      <div v-if="isLoading" class="loading-state">
-        <p>Loading dashboard...</p>
+      <div class="header">
+        <h1>Tenant Dashboard</h1>
+        <button class="logout-btn" @click="handleLogout">
+          <ArrowRightOnRectangleIcon class="logout-icon" />
+          <span>Logout</span>
+        </button>
       </div>
-
-      <!-- Error State -->
-      <div v-else-if="error" class="error-state">
-        <p>{{ error }}</p>
-        <button class="retry-btn" @click="fetchDashboardData">Retry</button>
-      </div>
-
-      <!-- Dashboard Content -->
-      <div v-else class="dashboard-content">
-        <!-- Top Row: Unit Info and Current Balance -->
-        <div class="top-row">
-          <!-- Unit 402 Card -->
-          <div class="unit-card">
-            <div class="unit-header">
-              <div class="unit-title-section">
-                <h2 class="unit-number">Unit {{ unit?.unit_number }}</h2>
-                <p class="unit-address">{{ unit?.property_name }}, {{ unit?.address }}</p>
-              </div>
-              <span class="status-badge status-active">{{ unit?.status }}</span>
-            </div>
-            
-            <div class="unit-details-grid">
-              <div class="detail-card">
-                <p class="detail-label">Monthly Rent</p>
-                <p class="detail-value">{{ formatCurrencyShort(unit?.monthly_rent) }}</p>
-              </div>
-              <div class="detail-card">
-                <p class="detail-label">Next Due</p>
-                <p class="detail-value">{{ formatDate(unit?.next_due) }}</p>
-              </div>
-              <div class="detail-card">
-                <p class="detail-label">Lease Ends</p>
-                <p class="detail-value">{{ formatMonthYear(unit?.lease_end) }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Current Balance Card -->
-          <div class="balance-card">
-            <h3 class="card-title">Current Balance</h3>
-            <p class="balance-amount">{{ formatCurrency(currentBalance) }}</p>
-            <button class="no-payment-button">No Payment Due</button>
-            <p class="invoice-note">Next invoice will be generated on Oct 25</p>
-          </div>
-        </div>
-
-        <!-- Middle Row: Utility Bills -->
-        <div class="middle-row">
-          <div class="utility-bills-card">
-            <h3 class="card-title">Utility Bills</h3>
-            <div class="utility-bills-list">
-              <div v-for="utility in utilityBills" :key="utility.id" class="utility-bill-item">
-                <div class="utility-bill-info">
-                  <p class="utility-name">{{ utility.name }}</p>
-                  <p class="utility-amount">{{ formatCurrency(utility.amount) }}</p>
-                </div>
-                <div class="utility-bill-status">
-                  <span 
-                    :class="['status-badge', utility.status === 'paid' ? 'status-paid' : 'status-unpaid']"
-                  >
-                    {{ utility.status === 'paid' ? 'Paid' : 'Unpaid' }}
-                  </span>
-                  <p class="utility-date">
-                    {{ utility.status === 'paid' ? 'Paid' : 'Due' }} {{ formatDate(utility.dueDate || utility.paidDate) }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Bottom Row: Payment History and Notifications -->
-        <div class="bottom-row">
-          <!-- Payment History Card -->
-          <div class="payment-history-card">
-            <h3 class="card-title">Payment History</h3>
-            <div class="table-container">
-              <table class="payment-table">
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Date Paid</th>
-                    <th>Receipt</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="payment in paymentHistory" :key="payment.id">
-                    <td>{{ payment.month }}</td>
-                    <td class="amount-cell">{{ formatCurrency(payment.amount) }}</td>
-                    <td>
-                      <span class="status-badge status-paid">{{ payment.status === 'paid' ? 'Paid' : payment.status }}</span>
-                    </td>
-                    <td>{{ formatDateFull(payment.datePaid) }}</td>
-                    <td>
-                      <button 
-                        class="download-link"
-                        @click="handleDownloadReceipt(payment.receiptUrl, payment.id)"
-                      >
-                        <ArrowDownTrayIcon class="download-icon" />
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Notifications Card -->
-          <div class="notifications-card">
-            <h3 class="card-title">Notifications</h3>
-            <div class="notifications-list">
-              <div v-for="notification in notifications" :key="notification.id" class="notification-item">
-                <div class="notification-icon-container">
-                  <BellIcon v-if="notification.icon === 'bell'" class="notification-icon" />
-                  <DocumentTextIcon v-else-if="notification.icon === 'document'" class="notification-icon" />
-                </div>
-                <div class="notification-content">
-                  <p class="notification-title">{{ notification.title }}</p>
-                  <p class="notification-message">{{ notification.message }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <p>Welcome to your tenant dashboard!</p>
     </div>
   </div>
 </template>
 
+<script setup>
+import { useRouter } from 'vue-router'
+import { ArrowRightOnRectangleIcon } from '@heroicons/vue/24/outline'
+import { useAuth } from '../composables/useAuth.js'
+
+const router = useRouter()
+const { logout: authLogout } = useAuth()
+
+const handleLogout = async () => {
+  await authLogout()
+  router.push('/')
+}
+</script>
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 
@@ -463,6 +350,45 @@ onMounted(() => {
   opacity: 0.8;
   margin: 0;
 }
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.logout-btn:hover {
+  background: #b91c1c;
+}
+
+.logout-icon {
+  width: 20px;
+  height: 20px;
+}
+</style>
 
 /* Middle Row */
 .middle-row {

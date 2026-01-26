@@ -18,7 +18,10 @@ const submitSuccess = ref(false)
 const formData = ref({
   // Personal Information
   id_picture: null,
-  name: '',
+  profile_picture: null,
+  first_name: '',
+  middle_name: '',
+  last_name: '',
   email: '',
   phone: '',
   whatsapp: '',
@@ -26,19 +29,24 @@ const formData = ref({
   monthly_income: '',
   address: '',
   number_of_people: '',
+  lease_duration_months: '',
+  lease_start_date: '',
   
   // References
-  mother_name: '',
-  mother_address: '',
-  mother_phone: '',
-  mother_email: '',
-  father_name: '',
-  father_address: '',
-  father_phone: '',
-  father_email: ''
+  reference1_name: '',
+  reference1_address: '',
+  reference1_phone: '',
+  reference1_email: '',
+  reference1_relationship: '',
+  reference2_name: '',
+  reference2_address: '',
+  reference2_phone: '',
+  reference2_email: '',
+  reference2_relationship: ''
 })
 
 const idPicturePreview = ref(null)
+const profilePicturePreview = ref(null)
 const fieldErrors = ref({})
 
 // Fetch unit and property information
@@ -100,13 +108,51 @@ const removeIdPicture = () => {
   idPicturePreview.value = null
 }
 
+// Handle profile picture upload
+const handleProfilePictureUpload = (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    alert('Please upload an image file.')
+    return
+  }
+  
+  // Validate file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    alert('Image size should be less than 5MB.')
+    return
+  }
+  
+  formData.value.profile_picture = file
+  
+  // Create preview
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    profilePicturePreview.value = e.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+// Remove profile picture
+const removeProfilePicture = () => {
+  formData.value.profile_picture = null
+  profilePicturePreview.value = null
+}
+
 // Validate form
 const validateForm = () => {
   fieldErrors.value = {}
   let hasError = false
   
-  if (!formData.value.name?.trim()) {
-    fieldErrors.value.name = true
+  if (!formData.value.first_name?.trim()) {
+    fieldErrors.value.first_name = true
+    hasError = true
+  }
+  
+  if (!formData.value.last_name?.trim()) {
+    fieldErrors.value.last_name = true
     hasError = true
   }
   
@@ -148,55 +194,76 @@ const validateForm = () => {
     hasError = true
   }
   
+  if (!formData.value.lease_duration_months) {
+    fieldErrors.value.lease_duration_months = true
+    hasError = true
+  }
+  
+  if (!formData.value.lease_start_date) {
+    fieldErrors.value.lease_start_date = true
+    hasError = true
+  }
+  
   if (!formData.value.id_picture) {
     fieldErrors.value.id_picture = true
     hasError = true
   }
   
-  // References validation
-  if (!formData.value.mother_name?.trim()) {
-    fieldErrors.value.mother_name = true
+  // References validation - Reference 1
+  if (!formData.value.reference1_name?.trim()) {
+    fieldErrors.value.reference1_name = true
     hasError = true
   }
   
-  if (!formData.value.mother_address?.trim()) {
-    fieldErrors.value.mother_address = true
+  if (!formData.value.reference1_address?.trim()) {
+    fieldErrors.value.reference1_address = true
     hasError = true
   }
   
-  if (!formData.value.mother_phone?.trim()) {
-    fieldErrors.value.mother_phone = true
+  if (!formData.value.reference1_phone?.trim()) {
+    fieldErrors.value.reference1_phone = true
     hasError = true
   }
   
-  if (!formData.value.mother_email?.trim()) {
-    fieldErrors.value.mother_email = true
+  if (!formData.value.reference1_email?.trim()) {
+    fieldErrors.value.reference1_email = true
     hasError = true
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.mother_email)) {
-    fieldErrors.value.mother_email = true
-    hasError = true
-  }
-  
-  if (!formData.value.father_name?.trim()) {
-    fieldErrors.value.father_name = true
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.reference1_email)) {
+    fieldErrors.value.reference1_email = true
     hasError = true
   }
   
-  if (!formData.value.father_address?.trim()) {
-    fieldErrors.value.father_address = true
+  if (!formData.value.reference1_relationship?.trim()) {
+    fieldErrors.value.reference1_relationship = true
     hasError = true
   }
   
-  if (!formData.value.father_phone?.trim()) {
-    fieldErrors.value.father_phone = true
+  // References validation - Reference 2
+  if (!formData.value.reference2_name?.trim()) {
+    fieldErrors.value.reference2_name = true
     hasError = true
   }
   
-  if (!formData.value.father_email?.trim()) {
-    fieldErrors.value.father_email = true
+  if (!formData.value.reference2_address?.trim()) {
+    fieldErrors.value.reference2_address = true
     hasError = true
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.father_email)) {
-    fieldErrors.value.father_email = true
+  }
+  
+  if (!formData.value.reference2_phone?.trim()) {
+    fieldErrors.value.reference2_phone = true
+    hasError = true
+  }
+  
+  if (!formData.value.reference2_email?.trim()) {
+    fieldErrors.value.reference2_email = true
+    hasError = true
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.reference2_email)) {
+    fieldErrors.value.reference2_email = true
+    hasError = true
+  }
+  
+  if (!formData.value.reference2_relationship?.trim()) {
+    fieldErrors.value.reference2_relationship = true
     hasError = true
   }
   
@@ -231,10 +298,25 @@ const submitApplication = async () => {
       })
     }
     
+    // Convert profile picture to base64 (optional)
+    let profilePictureBase64 = null
+    if (formData.value.profile_picture) {
+      profilePictureBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(formData.value.profile_picture)
+      })
+    }
+    
     const payload = {
       unit_id: parseInt(unitId.value, 10),
       id_picture: idPictureBase64,
-      name: formData.value.name.trim(),
+      profile_picture: profilePictureBase64,
+      first_name: formData.value.first_name.trim(),
+      middle_name: formData.value.middle_name?.trim() || '',
+      last_name: formData.value.last_name.trim(),
+      name: `${formData.value.first_name.trim()} ${formData.value.middle_name?.trim() || ''} ${formData.value.last_name.trim()}`.trim(), // Combine for backward compatibility
       email: formData.value.email.trim(),
       phone: formData.value.phone.trim(),
       whatsapp: formData.value.whatsapp.trim(),
@@ -242,14 +324,18 @@ const submitApplication = async () => {
       monthly_income: parseInt(formData.value.monthly_income.replace(/[^0-9]/g, ''), 10),
       address: formData.value.address.trim(),
       number_of_people: parseInt(formData.value.number_of_people, 10),
-      mother_name: formData.value.mother_name.trim(),
-      mother_address: formData.value.mother_address.trim(),
-      mother_phone: formData.value.mother_phone.trim(),
-      mother_email: formData.value.mother_email.trim(),
-      father_name: formData.value.father_name.trim(),
-      father_address: formData.value.father_address.trim(),
-      father_phone: formData.value.father_phone.trim(),
-      father_email: formData.value.father_email.trim()
+      lease_duration_months: parseInt(formData.value.lease_duration_months, 10),
+      lease_start_date: formData.value.lease_start_date,
+      reference1_name: formData.value.reference1_name.trim(),
+      reference1_address: formData.value.reference1_address.trim(),
+      reference1_phone: formData.value.reference1_phone.trim(),
+      reference1_email: formData.value.reference1_email.trim(),
+      reference1_relationship: formData.value.reference1_relationship.trim(),
+      reference2_name: formData.value.reference2_name.trim(),
+      reference2_address: formData.value.reference2_address.trim(),
+      reference2_phone: formData.value.reference2_phone.trim(),
+      reference2_email: formData.value.reference2_email.trim(),
+      reference2_relationship: formData.value.reference2_relationship.trim()
     }
     
     const res = await api.post('/tenant-applications', payload)
@@ -261,7 +347,30 @@ const submitApplication = async () => {
     }
   } catch (err) {
     console.error('Error submitting application:', err)
-    error.value = err.response?.data?.message || 'Failed to submit application. Please try again.'
+    
+    // Handle validation errors
+    if (err.response?.data?.errors) {
+      const errors = err.response.data.errors
+      
+      // Set field errors for validation failures
+      if (errors.email) {
+        fieldErrors.value.email = true
+        error.value = errors.email[0] || 'Email validation failed.'
+      } else if (err.response?.data?.message) {
+        error.value = err.response.data.message
+      } else {
+        error.value = 'Failed to submit application. Please check your inputs and try again.'
+      }
+    } else if (err.response?.data?.message) {
+      error.value = err.response.data.message
+      
+      // Check if it's an email-related error
+      if (err.response.data.message.toLowerCase().includes('email')) {
+        fieldErrors.value.email = true
+      }
+    } else {
+      error.value = 'Failed to submit application. Please try again.'
+    }
   } finally {
     isSubmitting.value = false
   }
@@ -340,18 +449,67 @@ onMounted(() => {
             <p v-if="fieldErrors.id_picture" class="field-error">ID picture is required</p>
           </div>
 
-          <!-- Name -->
+          <!-- Profile Picture -->
           <div class="form-group">
-            <label class="form-label">Full Name <span class="required">*</span></label>
+            <label class="form-label">Profile Picture</label>
+            <div :class="['file-upload', { error: fieldErrors.profile_picture }]">
+              <input
+                type="file"
+                accept="image/*"
+                @change="handleProfilePictureUpload"
+                class="file-input"
+                id="profile-picture"
+              />
+              <label for="profile-picture" class="file-label">
+                <svg v-if="!profilePicturePreview" class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span v-if="!profilePicturePreview">Click to upload profile picture</span>
+                <img v-else :src="profilePicturePreview" alt="Profile Preview" class="id-preview" />
+              </label>
+              <button v-if="profilePicturePreview" type="button" @click="removeProfilePicture" class="remove-image-btn">Remove</button>
+            </div>
+            <p v-if="fieldErrors.profile_picture" class="field-error">Profile picture error</p>
+          </div>
+
+          <!-- Name -->
+          <!-- First Name -->
+          <div class="form-group">
+            <label class="form-label">First Name <span class="required">*</span></label>
             <input
-              v-model="formData.name"
+              v-model="formData.first_name"
               type="text"
               class="form-input"
-              :class="{ error: fieldErrors.name }"
-              placeholder="Enter your full name"
-              @input="clearFieldError('name')"
+              :class="{ error: fieldErrors.first_name }"
+              placeholder="Enter your first name"
+              @input="clearFieldError('first_name')"
             />
-            <p v-if="fieldErrors.name" class="field-error">Name is required</p>
+            <p v-if="fieldErrors.first_name" class="field-error">First name is required</p>
+          </div>
+
+          <!-- Middle Name -->
+          <div class="form-group">
+            <label class="form-label">Middle Name</label>
+            <input
+              v-model="formData.middle_name"
+              type="text"
+              class="form-input"
+              placeholder="Enter your middle name (optional)"
+            />
+          </div>
+
+          <!-- Last Name -->
+          <div class="form-group">
+            <label class="form-label">Last Name <span class="required">*</span></label>
+            <input
+              v-model="formData.last_name"
+              type="text"
+              class="form-input"
+              :class="{ error: fieldErrors.last_name }"
+              placeholder="Enter your last name"
+              @input="clearFieldError('last_name')"
+            />
+            <p v-if="fieldErrors.last_name" class="field-error">Last name is required</p>
           </div>
 
           <!-- Email -->
@@ -452,123 +610,198 @@ onMounted(() => {
             />
             <p v-if="fieldErrors.number_of_people" class="field-error">Number of people is required (minimum 1)</p>
           </div>
+
+          <!-- Lease Duration -->
+          <div class="form-group">
+            <label class="form-label">Lease Duration <span class="required">*</span></label>
+            <select
+              v-model="formData.lease_duration_months"
+              class="form-select"
+              :class="{ error: fieldErrors.lease_duration_months }"
+              @change="clearFieldError('lease_duration_months')"
+            >
+              <option value="">Select lease duration</option>
+              <option value="1">1 Month</option>
+              <option value="3">3 Months</option>
+              <option value="6">6 Months</option>
+              <option value="12">1 Year</option>
+              <option value="24">2 Years</option>
+            </select>
+            <p v-if="fieldErrors.lease_duration_months" class="field-error">Lease duration is required</p>
+          </div>
+
+          <!-- Lease Start Date -->
+          <div class="form-group">
+            <label class="form-label">Lease Start Date <span class="required">*</span></label>
+            <input
+              v-model="formData.lease_start_date"
+              type="date"
+              class="form-input"
+              :class="{ error: fieldErrors.lease_start_date }"
+              :min="new Date().toISOString().split('T')[0]"
+              @input="clearFieldError('lease_start_date')"
+            />
+            <p v-if="fieldErrors.lease_start_date" class="field-error">Lease start date is required</p>
+          </div>
         </div>
 
         <!-- References Section -->
         <div class="form-section">
           <h2 class="section-title">References</h2>
           
-          <!-- Mother Information -->
+          <!-- Reference 1 Information -->
           <div class="reference-group">
-            <h3 class="reference-title">Mother's Information</h3>
+            <h3 class="reference-title">Reference 1</h3>
             
             <div class="form-group">
-              <label class="form-label">Mother's Name <span class="required">*</span></label>
+              <label class="form-label">Relationship <span class="required">*</span></label>
+              <select
+                v-model="formData.reference1_relationship"
+                class="form-input"
+                :class="{ error: fieldErrors.reference1_relationship }"
+                @change="clearFieldError('reference1_relationship')"
+              >
+                <option value="">Select relationship</option>
+                <option value="Mother">Mother</option>
+                <option value="Father">Father</option>
+                <option value="Sibling">Sibling</option>
+                <option value="Spouse">Spouse</option>
+                <option value="Friend">Friend</option>
+                <option value="Colleague">Colleague</option>
+                <option value="Relative">Relative</option>
+                <option value="Other">Other</option>
+              </select>
+              <p v-if="fieldErrors.reference1_relationship" class="field-error">Relationship is required</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Name <span class="required">*</span></label>
               <input
-                v-model="formData.mother_name"
+                v-model="formData.reference1_name"
                 type="text"
                 class="form-input"
-                :class="{ error: fieldErrors.mother_name }"
-                placeholder="Enter mother's full name"
-                @input="clearFieldError('mother_name')"
+                :class="{ error: fieldErrors.reference1_name }"
+                placeholder="Enter reference's full name"
+                @input="clearFieldError('reference1_name')"
               />
-              <p v-if="fieldErrors.mother_name" class="field-error">Mother's name is required</p>
+              <p v-if="fieldErrors.reference1_name" class="field-error">Name is required</p>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Mother's Address <span class="required">*</span></label>
+              <label class="form-label">Address <span class="required">*</span></label>
               <textarea
-                v-model="formData.mother_address"
+                v-model="formData.reference1_address"
                 class="form-textarea"
-                :class="{ error: fieldErrors.mother_address }"
-                placeholder="Enter mother's complete address"
+                :class="{ error: fieldErrors.reference1_address }"
+                placeholder="Enter reference's complete address"
                 rows="2"
-                @input="clearFieldError('mother_address')"
+                @input="clearFieldError('reference1_address')"
               ></textarea>
-              <p v-if="fieldErrors.mother_address" class="field-error">Mother's address is required</p>
+              <p v-if="fieldErrors.reference1_address" class="field-error">Address is required</p>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Mother's Phone Number <span class="required">*</span></label>
+              <label class="form-label">Phone Number <span class="required">*</span></label>
               <input
-                v-model="formData.mother_phone"
+                v-model="formData.reference1_phone"
                 type="tel"
                 class="form-input"
-                :class="{ error: fieldErrors.mother_phone }"
-                placeholder="Enter mother's phone number"
-                @input="clearFieldError('mother_phone')"
+                :class="{ error: fieldErrors.reference1_phone }"
+                placeholder="Enter reference's phone number"
+                @input="clearFieldError('reference1_phone')"
               />
-              <p v-if="fieldErrors.mother_phone" class="field-error">Mother's phone number is required</p>
+              <p v-if="fieldErrors.reference1_phone" class="field-error">Phone number is required</p>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Mother's Email <span class="required">*</span></label>
+              <label class="form-label">Email <span class="required">*</span></label>
               <input
-                v-model="formData.mother_email"
+                v-model="formData.reference1_email"
                 type="email"
                 class="form-input"
-                :class="{ error: fieldErrors.mother_email }"
-                placeholder="Enter mother's email"
-                @input="clearFieldError('mother_email')"
+                :class="{ error: fieldErrors.reference1_email }"
+                placeholder="Enter reference's email"
+                @input="clearFieldError('reference1_email')"
               />
-              <p v-if="fieldErrors.mother_email" class="field-error">Valid mother's email is required</p>
+              <p v-if="fieldErrors.reference1_email" class="field-error">Valid email is required</p>
             </div>
           </div>
 
-          <!-- Father Information -->
+          <!-- Reference 2 Information -->
           <div class="reference-group">
-            <h3 class="reference-title">Father's Information</h3>
+            <h3 class="reference-title">Reference 2</h3>
             
             <div class="form-group">
-              <label class="form-label">Father's Name <span class="required">*</span></label>
+              <label class="form-label">Relationship <span class="required">*</span></label>
+              <select
+                v-model="formData.reference2_relationship"
+                class="form-input"
+                :class="{ error: fieldErrors.reference2_relationship }"
+                @change="clearFieldError('reference2_relationship')"
+              >
+                <option value="">Select relationship</option>
+                <option value="Mother">Mother</option>
+                <option value="Father">Father</option>
+                <option value="Sibling">Sibling</option>
+                <option value="Spouse">Spouse</option>
+                <option value="Friend">Friend</option>
+                <option value="Colleague">Colleague</option>
+                <option value="Relative">Relative</option>
+                <option value="Other">Other</option>
+              </select>
+              <p v-if="fieldErrors.reference2_relationship" class="field-error">Relationship is required</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Name <span class="required">*</span></label>
               <input
-                v-model="formData.father_name"
+                v-model="formData.reference2_name"
                 type="text"
                 class="form-input"
-                :class="{ error: fieldErrors.father_name }"
-                placeholder="Enter father's full name"
-                @input="clearFieldError('father_name')"
+                :class="{ error: fieldErrors.reference2_name }"
+                placeholder="Enter reference's full name"
+                @input="clearFieldError('reference2_name')"
               />
-              <p v-if="fieldErrors.father_name" class="field-error">Father's name is required</p>
+              <p v-if="fieldErrors.reference2_name" class="field-error">Name is required</p>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Father's Address <span class="required">*</span></label>
+              <label class="form-label">Address <span class="required">*</span></label>
               <textarea
-                v-model="formData.father_address"
+                v-model="formData.reference2_address"
                 class="form-textarea"
-                :class="{ error: fieldErrors.father_address }"
-                placeholder="Enter father's complete address"
+                :class="{ error: fieldErrors.reference2_address }"
+                placeholder="Enter reference's complete address"
                 rows="2"
-                @input="clearFieldError('father_address')"
+                @input="clearFieldError('reference2_address')"
               ></textarea>
-              <p v-if="fieldErrors.father_address" class="field-error">Father's address is required</p>
+              <p v-if="fieldErrors.reference2_address" class="field-error">Address is required</p>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Father's Phone Number <span class="required">*</span></label>
+              <label class="form-label">Phone Number <span class="required">*</span></label>
               <input
-                v-model="formData.father_phone"
+                v-model="formData.reference2_phone"
                 type="tel"
                 class="form-input"
-                :class="{ error: fieldErrors.father_phone }"
-                placeholder="Enter father's phone number"
-                @input="clearFieldError('father_phone')"
+                :class="{ error: fieldErrors.reference2_phone }"
+                placeholder="Enter reference's phone number"
+                @input="clearFieldError('reference2_phone')"
               />
-              <p v-if="fieldErrors.father_phone" class="field-error">Father's phone number is required</p>
+              <p v-if="fieldErrors.reference2_phone" class="field-error">Phone number is required</p>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Father's Email <span class="required">*</span></label>
+              <label class="form-label">Email <span class="required">*</span></label>
               <input
-                v-model="formData.father_email"
+                v-model="formData.reference2_email"
                 type="email"
                 class="form-input"
-                :class="{ error: fieldErrors.father_email }"
-                placeholder="Enter father's email"
-                @input="clearFieldError('father_email')"
+                :class="{ error: fieldErrors.reference2_email }"
+                placeholder="Enter reference's email"
+                @input="clearFieldError('reference2_email')"
               />
-              <p v-if="fieldErrors.father_email" class="field-error">Valid father's email is required</p>
+              <p v-if="fieldErrors.reference2_email" class="field-error">Valid email is required</p>
             </div>
           </div>
         </div>
@@ -722,7 +955,8 @@ onMounted(() => {
 }
 
 .form-input,
-.form-textarea {
+.form-textarea,
+.form-select {
   padding: 12px 16px;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -731,22 +965,35 @@ onMounted(() => {
   color: #333;
   outline: none;
   transition: border-color 0.2s;
+  background-color: white;
 }
 
 .form-input:hover,
-.form-textarea:hover {
+.form-textarea:hover,
+.form-select:hover {
   border-color: #bbb;
 }
 
 .form-input:focus,
-.form-textarea:focus {
+.form-textarea:focus,
+.form-select:focus {
   border-color: #1500FF;
 }
 
 .form-input.error,
-.form-textarea.error {
+.form-textarea.error,
+.form-select.error {
   border-color: #dc2626;
   background-color: #fef2f2;
+}
+
+.form-select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
 }
 
 .form-textarea {
