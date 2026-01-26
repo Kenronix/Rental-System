@@ -1,14 +1,15 @@
 <script setup>
-import { ref, computed, onMounted, onActivated } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Sidebar from '../components/layout/Sidebar.vue'
 import { 
   MagnifyingGlassIcon,
   EyeIcon,
-  PencilIcon,
   EllipsisVerticalIcon,
   EnvelopeIcon,
-  XMarkIcon
+  XMarkIcon,
+  TrashIcon,
+  KeyIcon
 } from '@heroicons/vue/24/outline'
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/vue/24/solid'
 import api from '../services/api.js'
@@ -21,8 +22,7 @@ const properties = ref([])
 const statistics = ref({
   total_tenants: 0,
   active_leases: 0,
-  pending_invites: 0,
-  payment_issues: 0
+  pending_invites: 0
 })
 const isLoading = ref(false)
 const error = ref(null)
@@ -30,12 +30,17 @@ const showApplicationModal = ref(false)
 const selectedApplication = ref(null)
 const isLoadingApplication = ref(false)
 const isUpdatingStatus = ref(false)
+const openDropdownId = ref(null)
+const dropdownPosition = ref({ top: 0, right: 0 })
+const showTenantModal = ref(false)
+const selectedTenant = ref(null)
+const isLoadingTenant = ref(false)
 
 const searchQuery = ref('')
 const statusFilter = ref('All')
 const propertyFilter = ref('All')
 const currentPage = ref(1)
-const itemsPerPage = ref(5)
+const itemsPerPage = ref(10)
 
 // Fetch tenants data
 const fetchTenants = async () => {
@@ -53,15 +58,13 @@ const fetchTenants = async () => {
         statistics.value = {
           total_tenants: response.data.statistics.total_tenants || 0,
           active_leases: response.data.statistics.active_leases || 0,
-          pending_invites: response.data.statistics.pending_invites || 0,
-          payment_issues: response.data.statistics.payment_issues || 0
+          pending_invites: response.data.statistics.pending_invites || 0
         }
       } else {
         statistics.value = {
           total_tenants: 0,
           active_leases: 0,
-          pending_invites: 0,
-          payment_issues: 0
+          pending_invites: 0
         }
       }
       
@@ -194,7 +197,18 @@ const getStatusClass = (status) => {
 // Format lease start date (handle applications)
 const formatLeaseStart = (dateString, type) => {
   if (type === 'application') {
-    return 'Pending'
+    return '-'
+  }
+  return formatDate(dateString)
+}
+
+// Format lease end date (handle applications)
+const formatLeaseEnd = (dateString, type) => {
+  if (type === 'application') {
+    return '-'
+  }
+  if (!dateString) {
+    return 'N/A'
   }
   return formatDate(dateString)
 }
@@ -204,9 +218,9 @@ const handleViewTenant = async (tenant) => {
   // If it's an application, show application details
   if (tenant.type === 'application' && tenant.application_id) {
     await openApplicationModal(tenant.application_id)
-  } else {
-    // Navigate to tenant details page for actual tenants
-    console.log('View tenant:', tenant)
+  } else if (tenant.id && tenant.type === 'tenant') {
+    // Show tenant details modal with the specific unit they applied for
+    await openTenantModal(tenant.id, tenant.unit_id)
   }
 }
 
@@ -236,6 +250,39 @@ const closeApplicationModal = () => {
   selectedApplication.value = null
 }
 
+const openTenantModal = async (tenantId, unitId) => {
+  isLoadingTenant.value = true
+  showTenantModal.value = true
+  selectedTenant.value = null
+  error.value = null
+  
+  try {
+    // Pass unitId as query parameter so backend can find the correct application
+    const url = unitId ? `/tenants/${tenantId}?unit_id=${unitId}` : `/tenants/${tenantId}`
+    const response = await api.get(url)
+    if (response.data.success) {
+      const tenant = response.data.tenant
+      // Filter to show only the unit they applied for
+      if (unitId && tenant.units) {
+        tenant.units = tenant.units.filter(unit => unit.id === unitId)
+      }
+      selectedTenant.value = tenant
+    } else {
+      error.value = response.data.message || 'Failed to load tenant details.'
+    }
+  } catch (err) {
+    console.error('Error fetching tenant:', err)
+    error.value = err.response?.data?.message || 'Failed to load tenant details. Please try again.'
+  } finally {
+    isLoadingTenant.value = false
+  }
+}
+
+const closeTenantModal = () => {
+  showTenantModal.value = false
+  selectedTenant.value = null
+}
+
 // Approve application
 const approveApplication = async () => {
   if (!selectedApplication.value || !selectedApplication.value.id) return
@@ -246,8 +293,8 @@ const approveApplication = async () => {
     if (response.data.success) {
       // Close the modal first
       closeApplicationModal()
-      // Small delay to ensure database is committed
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Longer delay to ensure database is committed and statistics are updated
+      await new Promise(resolve => setTimeout(resolve, 300))
       // Refresh the tenants list to get updated statistics
       await fetchTenants()
       alert('Application approved successfully! Tenant has been assigned to the unit.')
@@ -290,9 +337,74 @@ const rejectApplication = async () => {
   }
 }
 
-const handleEditTenant = (tenant) => {
-  // Navigate to edit tenant page
-  console.log('Edit tenant:', tenant)
+const toggleDropdown = (tenantId, event) => {
+  if (openDropdownId.value === tenantId) {
+    openDropdownId.value = null
+  } else {
+    openDropdownId.value = tenantId
+    // Calculate position immediately
+    if (event && event.currentTarget) {
+      const buttonRect = event.currentTarget.getBoundingClientRect()
+      dropdownPosition.value = {
+        top: buttonRect.bottom + 4,
+        right: window.innerWidth - buttonRect.right
+      }
+    }
+  }
+}
+
+const handleDeleteTenant = async (tenant) => {
+  if (!tenant.id || tenant.type === 'application') {
+    alert('Cannot delete tenant applications. Please reject them instead.')
+    return
+  }
+
+  if (!confirm(`Are you sure you want to remove ${tenant.name} from this unit? This action cannot be undone.`)) {
+    return
+  }
+
+  try {
+    const response = await api.delete(`/tenants/${tenant.id}`)
+    
+    if (response.data.success) {
+      alert('Tenant removed successfully.')
+      // Refresh the tenants list
+      await fetchTenants()
+    } else {
+      alert(response.data.message || 'Failed to remove tenant.')
+    }
+  } catch (err) {
+    console.error('Error deleting tenant:', err)
+    alert(err.response?.data?.message || 'Failed to remove tenant. Please try again.')
+  }
+  
+  openDropdownId.value = null
+}
+
+const handleGenerateAccount = async (tenant) => {
+  if (!tenant.id || tenant.type === 'application') {
+    alert('Cannot generate account for tenant applications. Please approve them first.')
+    return
+  }
+  
+  if (!confirm(`Generate login account for ${tenant.name}? A new password will be created.`)) {
+    return
+  }
+  
+  try {
+    const response = await api.post(`/tenants/${tenant.id}/generate-account`)
+    if (response.data.success) {
+      const credentials = response.data.credentials
+      const message = `Account credentials generated successfully!\n\nEmail: ${credentials.email}\nPassword: ${credentials.password}\n\nPlease share these credentials with the tenant.`
+      alert(message)
+      openDropdownId.value = null
+    } else {
+      alert(response.data.message || 'Failed to generate account.')
+    }
+  } catch (err) {
+    console.error('Error generating account:', err)
+    alert(err.response?.data?.message || 'Failed to generate account. Please try again.')
+  }
 }
 
 const handleInviteTenant = () => {
@@ -311,7 +423,93 @@ const formatCurrencyDisplay = (amount) => {
   }).format(amount)
 }
 
+const getUnitTypeLabel = (type) => {
+  const typeMap = {
+    'studio': 'Studio',
+    'apartment': 'Apartment',
+    '1br': '1 Bedroom',
+    '2br': '2 Bedroom',
+    '3br': '3 Bedroom',
+    '4br': '4+ Bedroom',
+    'penthouse': 'Penthouse'
+  }
+  return typeMap[type] || type
+}
+
+const getAmenityLabel = (amenity) => {
+  const amenityMap = {
+    'parking': 'Parking',
+    'air_conditioning': 'Air Conditioning',
+    'heating': 'Heating',
+    'washer_dryer': 'Washer/Dryer',
+    'dishwasher': 'Dishwasher',
+    'balcony': 'Balcony',
+    'gym': 'Gym Access',
+    'pool': 'Pool Access',
+    'elevator': 'Elevator',
+    'pet_friendly': 'Pet Friendly',
+    'furnished': 'Furnished',
+    'wifi': 'WiFi Included'
+  }
+  return amenityMap[amenity] || amenity.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+const formatLeaseDuration = (months) => {
+  if (!months) return 'N/A'
+  const durationMap = {
+    1: '1 Month',
+    3: '3 Months',
+    6: '6 Months',
+    12: '1 Year',
+    24: '2 Years'
+  }
+  return durationMap[months] || `${months} Month${months > 1 ? 's' : ''}`
+}
+
+const calculateLeaseRemaining = (leaseEnd) => {
+  if (!leaseEnd) return 'N/A'
+  const endDate = new Date(leaseEnd)
+  const today = new Date()
+  const diffTime = endDate - today
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  
+  if (diffDays < 0) {
+    return 'Expired'
+  } else if (diffDays < 30) {
+    return `${diffDays} days remaining`
+  } else if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30)
+    return `${months} month${months !== 1 ? 's' : ''} remaining`
+  } else {
+    const years = Math.floor(diffDays / 365)
+    const months = Math.floor((diffDays % 365) / 30)
+    if (months > 0) {
+      return `${years} year${years !== 1 ? 's' : ''}, ${months} month${months !== 1 ? 's' : ''} remaining`
+    }
+    return `${years} year${years !== 1 ? 's' : ''} remaining`
+  }
+}
+
 // Get image URL
+const handleAvatarError = (event) => {
+  // Hide the image and show the initial letter instead
+  event.target.style.display = 'none'
+  const avatar = event.target.closest('.tenant-avatar')
+  if (avatar) {
+    const initial = avatar.querySelector('.tenant-avatar-initial')
+    if (initial) {
+      initial.style.display = 'flex'
+    } else {
+      // Create initial if it doesn't exist
+      const tenantName = event.target.alt || 'T'
+      const initialSpan = document.createElement('span')
+      initialSpan.className = 'tenant-avatar-initial'
+      initialSpan.textContent = tenantName.charAt(0).toUpperCase()
+      avatar.appendChild(initialSpan)
+    }
+  }
+}
+
 const getImageUrl = (imagePath) => {
   if (!imagePath) return ''
   
@@ -352,12 +550,24 @@ const handleImageError = (event) => {
   }
 }
 
+// Close dropdown when clicking outside
+const handleClickOutside = (event) => {
+  if (!event.target.closest('.dropdown-container') && !event.target.closest('.dropdown-menu-fixed')) {
+    openDropdownId.value = null
+  }
+}
+
 onMounted(() => {
   fetchTenants()
+  document.addEventListener('click', handleClickOutside)
 })
 
 onActivated(() => {
   fetchTenants()
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -381,10 +591,6 @@ onActivated(() => {
         <div class="stat-card">
           <div class="stat-value">{{ statistics.pending_invites }}</div>
           <div class="stat-label">Pending Invites</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">{{ statistics.payment_issues }}</div>
-          <div class="stat-label">Payment Issues</div>
         </div>
       </div>
 
@@ -449,6 +655,7 @@ onActivated(() => {
               <th>Unit</th>
               <th>Rent</th>
               <th>Lease Start</th>
+              <th>Lease End</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -458,7 +665,16 @@ onActivated(() => {
               <td class="tenant-cell">
                 <div class="tenant-info">
                   <div class="tenant-avatar">
-                    {{ tenant.name.charAt(0).toUpperCase() }}
+                    <img 
+                      v-if="tenant.profile_picture" 
+                      :src="getImageUrl(tenant.profile_picture)" 
+                      :alt="tenant.name"
+                      class="tenant-avatar-img"
+                      @error="handleAvatarError"
+                    />
+                    <span v-else class="tenant-avatar-initial">
+                      {{ tenant.name.charAt(0).toUpperCase() }}
+                    </span>
                   </div>
                   <div class="tenant-details">
                     <div class="tenant-name">{{ tenant.name }}</div>
@@ -468,8 +684,9 @@ onActivated(() => {
               </td>
               <td>{{ tenant.property_name }}</td>
               <td>{{ tenant.unit_number }}</td>
-              <td>{{ formatCurrency(tenant.rent) }} per month</td>
+              <td>{{ formatCurrency(tenant.rent) }} /month</td>
               <td>{{ formatLeaseStart(tenant.lease_start, tenant.type) }}</td>
+              <td>{{ formatLeaseEnd(tenant.lease_end, tenant.type) }}</td>
               <td>
                 <span :class="['status-badge', getStatusClass(tenant.status)]">
                   {{ tenant.status.charAt(0).toUpperCase() + tenant.status.slice(1) }}
@@ -480,14 +697,17 @@ onActivated(() => {
                   <button class="action-btn" @click="handleViewTenant(tenant)" title="View Details">
                     <EyeIcon class="action-icon" />
                   </button>
-                  <!-- Only show Edit and More Options for non-pending applications -->
+                  <!-- Only show More Options for non-pending applications -->
                   <template v-if="tenant.status !== 'pending' || tenant.type !== 'application'">
-                    <button class="action-btn" @click="handleEditTenant(tenant)" title="Edit">
-                      <PencilIcon class="action-icon" />
-                    </button>
-                    <button class="action-btn" title="More Options">
-                      <EllipsisVerticalIcon class="action-icon" />
-                    </button>
+                    <div class="dropdown-container">
+                      <button 
+                        class="action-btn" 
+                        @click.stop="toggleDropdown(tenant.id || `app-${tenant.application_id}`, $event)"
+                        title="More Options"
+                      >
+                        <EllipsisVerticalIcon class="action-icon" />
+                      </button>
+                    </div>
                   </template>
                 </div>
               </td>
@@ -499,6 +719,31 @@ onActivated(() => {
       <!-- Empty State -->
       <div v-else class="empty-state">
         <p>No tenants found. {{ searchQuery || statusFilter !== 'All' || propertyFilter !== 'All' ? 'Try adjusting your filters.' : 'Invite tenants to get started.' }}</p>
+      </div>
+
+      <!-- Dropdown Menu (Fixed Position - Outside Card) -->
+      <div 
+        v-if="openDropdownId"
+        class="dropdown-menu-fixed"
+        :style="{ top: dropdownPosition.top + 'px', right: dropdownPosition.right + 'px' }"
+        @click.stop
+      >
+        <button 
+          v-if="paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId)?.id && paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId)?.type === 'tenant'"
+          class="dropdown-item"
+          @click="handleGenerateAccount(paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId))"
+        >
+          <KeyIcon class="dropdown-icon" />
+          <span>Generate Account</span>
+        </button>
+        <button 
+          v-if="paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId)?.id && paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId)?.type === 'tenant'"
+          class="dropdown-item delete-item"
+          @click="handleDeleteTenant(paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId))"
+        >
+          <TrashIcon class="dropdown-icon" />
+          <span>Delete</span>
+        </button>
       </div>
 
       <!-- Pagination -->
@@ -547,6 +792,27 @@ onActivated(() => {
           </div>
 
           <div v-else-if="selectedApplication" class="modal-content">
+            <!-- Profile Picture -->
+            <div class="detail-section">
+              <h3 class="section-title">Profile Picture</h3>
+              <div class="id-picture-container">
+                <div v-if="selectedApplication.profile_picture" class="id-picture-wrapper">
+                  <img 
+                    :src="getImageUrl(selectedApplication.profile_picture)" 
+                    alt="Profile Picture" 
+                    class="id-picture-image"
+                    @error="handleImageError"
+                  />
+                </div>
+                <div v-else class="id-picture-placeholder">
+                  <svg class="placeholder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span class="placeholder-text">Profile Picture</span>
+                </div>
+              </div>
+            </div>
+
             <!-- ID Picture -->
             <div class="detail-section">
               <h3 class="section-title">ID Picture</h3>
@@ -604,51 +870,67 @@ onActivated(() => {
                   <label class="detail-label">Number of People</label>
                   <p class="detail-value">{{ selectedApplication.number_of_people }}</p>
                 </div>
-              </div>
-            </div>
-
-            <!-- Mother's Information -->
-            <div class="detail-section">
-              <h3 class="section-title">Mother's Information</h3>
-              <div class="detail-grid">
-                <div class="detail-item">
-                  <label class="detail-label">Name</label>
-                  <p class="detail-value">{{ selectedApplication.mother_name }}</p>
+                <div v-if="selectedApplication.lease_duration_months" class="detail-item">
+                  <label class="detail-label">Lease Duration</label>
+                  <p class="detail-value">{{ formatLeaseDuration(selectedApplication.lease_duration_months) }}</p>
                 </div>
-                <div class="detail-item full-width">
-                  <label class="detail-label">Address</label>
-                  <p class="detail-value">{{ selectedApplication.mother_address }}</p>
-                </div>
-                <div class="detail-item">
-                  <label class="detail-label">Phone Number</label>
-                  <p class="detail-value">{{ selectedApplication.mother_phone }}</p>
-                </div>
-                <div class="detail-item">
-                  <label class="detail-label">Email</label>
-                  <p class="detail-value">{{ selectedApplication.mother_email }}</p>
+                <div v-if="selectedApplication.lease_start_date" class="detail-item">
+                  <label class="detail-label">Lease Start Date</label>
+                  <p class="detail-value">{{ formatDate(selectedApplication.lease_start_date) }}</p>
                 </div>
               </div>
             </div>
 
-            <!-- Father's Information -->
+            <!-- Reference 1 Information -->
             <div class="detail-section">
-              <h3 class="section-title">Father's Information</h3>
+              <h3 class="section-title">Reference 1</h3>
               <div class="detail-grid">
                 <div class="detail-item">
+                  <label class="detail-label">Relationship</label>
+                  <p class="detail-value">{{ selectedApplication.reference1_relationship || 'N/A' }}</p>
+                </div>
+                <div class="detail-item">
                   <label class="detail-label">Name</label>
-                  <p class="detail-value">{{ selectedApplication.father_name }}</p>
+                  <p class="detail-value">{{ selectedApplication.reference1_name }}</p>
                 </div>
                 <div class="detail-item full-width">
                   <label class="detail-label">Address</label>
-                  <p class="detail-value">{{ selectedApplication.father_address }}</p>
+                  <p class="detail-value">{{ selectedApplication.reference1_address }}</p>
                 </div>
                 <div class="detail-item">
                   <label class="detail-label">Phone Number</label>
-                  <p class="detail-value">{{ selectedApplication.father_phone }}</p>
+                  <p class="detail-value">{{ selectedApplication.reference1_phone }}</p>
                 </div>
                 <div class="detail-item">
                   <label class="detail-label">Email</label>
-                  <p class="detail-value">{{ selectedApplication.father_email }}</p>
+                  <p class="detail-value">{{ selectedApplication.reference1_email }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reference 2 Information -->
+            <div class="detail-section">
+              <h3 class="section-title">Reference 2</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <label class="detail-label">Relationship</label>
+                  <p class="detail-value">{{ selectedApplication.reference2_relationship || 'N/A' }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Name</label>
+                  <p class="detail-value">{{ selectedApplication.reference2_name }}</p>
+                </div>
+                <div class="detail-item full-width">
+                  <label class="detail-label">Address</label>
+                  <p class="detail-value">{{ selectedApplication.reference2_address }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Phone Number</label>
+                  <p class="detail-value">{{ selectedApplication.reference2_phone }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Email</label>
+                  <p class="detail-value">{{ selectedApplication.reference2_email }}</p>
                 </div>
               </div>
             </div>
@@ -680,6 +962,217 @@ onActivated(() => {
                 >
                   {{ isUpdatingStatus ? 'Processing...' : 'Reject' }}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tenant Details Modal -->
+      <div v-if="showTenantModal" class="modal-overlay" @click.self="closeTenantModal">
+        <div class="modal-container" @click.stop>
+          <div class="modal-header">
+            <h2 class="modal-title">Tenant Details</h2>
+            <button class="modal-close-btn" @click="closeTenantModal">
+              <XMarkIcon class="close-icon" />
+            </button>
+          </div>
+
+          <div v-if="isLoadingTenant" class="modal-loading">
+            <p>Loading tenant details...</p>
+          </div>
+
+          <div v-else-if="error && !selectedTenant" class="modal-error">
+            <p class="error-text">{{ error }}</p>
+            <button class="retry-btn" @click="closeTenantModal">Close</button>
+          </div>
+
+          <div v-else-if="selectedTenant" class="modal-content">
+            <!-- Profile Picture -->
+            <div v-if="selectedTenant.application?.profile_picture" class="detail-section">
+              <h3 class="section-title">Profile Picture</h3>
+              <div class="id-picture-container">
+                <div class="id-picture-wrapper">
+                  <img 
+                    :src="getImageUrl(selectedTenant.application.profile_picture)" 
+                    alt="Profile Picture" 
+                    class="id-picture-image"
+                    @error="handleImageError"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- ID Picture -->
+            <div v-if="selectedTenant.application?.id_picture" class="detail-section">
+              <h3 class="section-title">ID Picture</h3>
+              <div class="id-picture-container">
+                <div class="id-picture-wrapper">
+                  <img 
+                    :src="getImageUrl(selectedTenant.application.id_picture)" 
+                    alt="ID Picture" 
+                    class="id-picture-image"
+                    @error="handleImageError"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Tenant Information -->
+            <div class="detail-section">
+              <h3 class="section-title">Personal Information</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <label class="detail-label">Full Name</label>
+                  <p class="detail-value">{{ selectedTenant.name }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Email</label>
+                  <p class="detail-value">{{ selectedTenant.email }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Phone Number</label>
+                  <p class="detail-value">{{ selectedTenant.phone || 'N/A' }}</p>
+                </div>
+                <div v-if="selectedTenant.application?.whatsapp" class="detail-item">
+                  <label class="detail-label">WhatsApp</label>
+                  <p class="detail-value">{{ selectedTenant.application.whatsapp }}</p>
+                </div>
+                <div class="detail-item full-width">
+                  <label class="detail-label">Address</label>
+                  <p class="detail-value">{{ selectedTenant.address || 'N/A' }}</p>
+                </div>
+                <div v-if="selectedTenant.application?.occupation" class="detail-item">
+                  <label class="detail-label">Occupation</label>
+                  <p class="detail-value">{{ selectedTenant.application.occupation }}</p>
+                </div>
+                <div v-if="selectedTenant.application?.monthly_income" class="detail-item">
+                  <label class="detail-label">Monthly Income</label>
+                  <p class="detail-value">{{ formatCurrencyDisplay(selectedTenant.application.monthly_income) }}</p>
+                </div>
+                <div v-if="selectedTenant.application?.number_of_people" class="detail-item">
+                  <label class="detail-label">Number of People</label>
+                  <p class="detail-value">{{ selectedTenant.application.number_of_people }}</p>
+                </div>
+                <div v-if="selectedTenant.application?.lease_duration_months" class="detail-item">
+                  <label class="detail-label">Lease Duration</label>
+                  <p class="detail-value">{{ formatLeaseDuration(selectedTenant.application.lease_duration_months) }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reference 1 Information -->
+            <div v-if="selectedTenant.application?.reference1" class="detail-section">
+              <h3 class="section-title">Reference 1</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <label class="detail-label">Relationship</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference1.relationship || 'N/A' }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Name</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference1.name }}</p>
+                </div>
+                <div class="detail-item full-width">
+                  <label class="detail-label">Address</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference1.address }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Phone Number</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference1.phone }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Email</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference1.email }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reference 2 Information -->
+            <div v-if="selectedTenant.application?.reference2" class="detail-section">
+              <h3 class="section-title">Reference 2</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <label class="detail-label">Relationship</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference2.relationship || 'N/A' }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Name</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference2.name }}</p>
+                </div>
+                <div class="detail-item full-width">
+                  <label class="detail-label">Address</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference2.address }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Phone Number</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference2.phone }}</p>
+                </div>
+                <div class="detail-item">
+                  <label class="detail-label">Email</label>
+                  <p class="detail-value">{{ selectedTenant.application.reference2.email }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Unit Information -->
+            <div v-if="selectedTenant.units && selectedTenant.units.length > 0" class="detail-section">
+              <h3 class="section-title">Applied Unit</h3>
+              <div class="units-list">
+                <div v-for="unit in selectedTenant.units" :key="unit.id" class="unit-item">
+                  <div class="unit-info">
+                    <div class="unit-header-info">
+                      <div class="unit-title-section">
+                        <h4 class="unit-name">{{ unit.property_name }} - Unit {{ unit.unit_number }}</h4>
+                        <p v-if="unit.property_address" class="unit-property-address">{{ unit.property_address }}</p>
+                      </div>
+                      <span :class="['status-badge', unit.status === 'active' ? 'status-active' : 'status-inactive']">
+                        {{ unit.status.charAt(0).toUpperCase() + unit.status.slice(1) }}
+                      </span>
+                    </div>
+                    
+                    <div class="unit-details-grid">
+                      <div v-if="unit.unit_type" class="unit-detail-item">
+                        <label class="unit-detail-label">Unit Type:</label>
+                        <span class="unit-detail-value">{{ getUnitTypeLabel(unit.unit_type) }}</span>
+                      </div>
+                      <div v-if="unit.bedrooms !== null && unit.bedrooms !== undefined" class="unit-detail-item">
+                        <label class="unit-detail-label">Bedrooms:</label>
+                        <span class="unit-detail-value">{{ unit.bedrooms }}</span>
+                      </div>
+                      <div v-if="unit.bathrooms !== null && unit.bathrooms !== undefined" class="unit-detail-item">
+                        <label class="unit-detail-label">Bathrooms:</label>
+                        <span class="unit-detail-value">{{ unit.bathrooms }}</span>
+                      </div>
+                      <div v-if="unit.square_footage" class="unit-detail-item">
+                        <label class="unit-detail-label">Square Footage:</label>
+                        <span class="unit-detail-value">{{ unit.square_footage }} sq ft</span>
+                      </div>
+                      <div class="unit-detail-item">
+                        <label class="unit-detail-label">Monthly Rent:</label>
+                        <span class="unit-detail-value highlight">{{ formatCurrencyDisplay(unit.monthly_rent) }}</span>
+                      </div>
+                      <div v-if="unit.security_deposit" class="unit-detail-item">
+                        <label class="unit-detail-label">Security Deposit:</label>
+                        <span class="unit-detail-value">{{ formatCurrencyDisplay(unit.security_deposit) }}</span>
+                      </div>
+                      <div class="unit-detail-item">
+                        <label class="unit-detail-label">Lease Start:</label>
+                        <span class="unit-detail-value">{{ unit.lease_start ? formatDate(unit.lease_start) : 'N/A' }}</span>
+                      </div>
+                      <div class="unit-detail-item">
+                        <label class="unit-detail-label">Lease End:</label>
+                        <span class="unit-detail-value">{{ unit.lease_end ? formatDate(unit.lease_end) : 'N/A' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="detail-section">
+              <h3 class="section-title">Applied Unit</h3>
+              <div class="empty-units">
+                <p>No unit information available.</p>
               </div>
             </div>
           </div>
@@ -866,14 +1359,17 @@ onActivated(() => {
 .table-container {
   background: white;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   margin-bottom: 24px;
+  position: relative;
 }
 
 .tenants-table {
   width: 100%;
   border-collapse: collapse;
+  position: relative;
 }
 
 .tenants-table thead {
@@ -894,6 +1390,8 @@ onActivated(() => {
   border-bottom: 1px solid #e5e5e5;
   font-size: 14px;
   color: #333;
+  position: relative;
+  overflow: visible;
 }
 
 .tenants-table tbody tr:hover {
@@ -919,6 +1417,30 @@ onActivated(() => {
   width: 40px;
   height: 40px;
   border-radius: 50%;
+  background: #1500FF;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.tenant-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.tenant-avatar-initial {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
   background: #1500FF;
   color: white;
   display: flex;
@@ -1013,6 +1535,55 @@ onActivated(() => {
 .action-icon {
   width: 18px;
   height: 18px;
+}
+
+/* Dropdown Menu */
+.dropdown-container {
+  position: relative;
+  z-index: 1;
+}
+
+.dropdown-menu-fixed {
+  position: fixed;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 150px;
+  z-index: 10000;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+  color: #374151;
+}
+
+.dropdown-item:hover {
+  background: #f3f4f6;
+}
+
+.dropdown-item.delete-item {
+  color: #dc2626;
+}
+
+.dropdown-item.delete-item:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.dropdown-icon {
+  width: 16px;
+  height: 16px;
 }
 
 /* Pagination */
@@ -1207,6 +1778,32 @@ onActivated(() => {
   color: #666;
 }
 
+.modal-error {
+  padding: 40px;
+  text-align: center;
+}
+
+.modal-error .error-text {
+  color: #dc2626;
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.modal-error .retry-btn {
+  padding: 8px 16px;
+  background: #1500FF;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.modal-error .retry-btn:hover {
+  background: #1200e6;
+}
+
 .modal-content {
   padding: 24px;
 }
@@ -1350,6 +1947,155 @@ onActivated(() => {
 
 .btn-reject:hover:not(:disabled) {
   background: #dc2626;
+}
+
+/* Tenant Modal Specific Styles */
+.units-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.unit-item {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+}
+
+.unit-header-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.unit-title-section {
+  flex: 1;
+}
+
+.unit-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.unit-property-address {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.unit-specs-section,
+.unit-financial-section,
+.unit-lease-section,
+.unit-amenities-section,
+.unit-description-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.unit-specs-section:last-child,
+.unit-financial-section:last-child,
+.unit-lease-section:last-child,
+.unit-amenities-section:last-child,
+.unit-description-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.unit-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 12px 0;
+}
+
+.unit-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.unit-spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.unit-spec-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.unit-spec-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.unit-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.unit-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.unit-detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.unit-detail-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.unit-detail-value.highlight {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1500FF;
+}
+
+.amenities-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amenity-tag {
+  padding: 6px 12px;
+  background: #f3f4f6;
+  color: #374151;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.unit-description-text {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.empty-units {
+  text-align: center;
+  padding: 24px;
+  color: #9ca3af;
 }
 
 @media (max-width: 768px) {
