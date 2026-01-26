@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('unit_id')->constrained('units')->onDelete('cascade');
             $table->string('id_picture')->nullable();
+            $table->string('profile_picture')->nullable();
             
             // Personal Information
             $table->string('name');
@@ -23,17 +24,19 @@ return new class extends Migration
             $table->text('address');
             $table->integer('number_of_people')->default(1);
             
-            // Mother's Information
-            $table->string('mother_name');
-            $table->text('mother_address');
-            $table->string('mother_phone');
-            $table->string('mother_email');
+            // Reference 1 Information
+            $table->string('reference1_name');
+            $table->text('reference1_address');
+            $table->string('reference1_phone');
+            $table->string('reference1_email');
+            $table->string('reference1_relationship')->nullable();
             
-            // Father's Information
-            $table->string('father_name');
-            $table->text('father_address');
-            $table->string('father_phone');
-            $table->string('father_email');
+            // Reference 2 Information
+            $table->string('reference2_name');
+            $table->text('reference2_address');
+            $table->string('reference2_phone');
+            $table->string('reference2_email');
+            $table->string('reference2_relationship')->nullable();
             
             // Application Status
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
