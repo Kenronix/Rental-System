@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '../components/layout/Sidebar.vue'
 import { 
@@ -8,8 +8,10 @@ import {
   PencilIcon,
   MapPinIcon,
   BuildingOfficeIcon,
+  EllipsisVerticalIcon,
   UsersIcon
 } from '@heroicons/vue/24/outline'
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/vue/24/solid'
 import api from '../services/api.js'
 
 const route = useRoute()
@@ -17,8 +19,13 @@ const router = useRouter()
 
 const property = ref(null)
 const units = ref([])
+const allUnits = ref([])
 const isLoading = ref(false)
 const error = ref(null)
+const unitsCurrentPage = ref(1)
+const unitsPerPage = ref(8)
+const openMenuId = ref(null)
+const availabilityFilter = ref('All')
 
 // Fetch property details
 const fetchProperty = async () => {
@@ -47,18 +54,65 @@ const fetchUnits = async () => {
     const response = await api.get(`/properties/${route.params.id}/units`)
     
     if (response.data.success) {
-      units.value = response.data.units.map(unit => ({
+      allUnits.value = response.data.units.map(unit => ({
         id: unit.id,
         unitNumber: unit.unit_number,
         status: unit.is_occupied ? 'Occupied' : 'Available',
+        is_occupied: unit.is_occupied,
         image: unit.photos && unit.photos.length > 0 
           ? unit.photos[0] 
           : 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&h=300&fit=crop'
       }))
+      unitsCurrentPage.value = 1
+      applyAvailabilityFilter()
     }
   } catch (err) {
     console.error('Error fetching units:', err)
   }
+}
+
+// Filter units by availability
+const filteredUnits = computed(() => {
+  if (availabilityFilter.value === 'All') {
+    return allUnits.value
+  } else if (availabilityFilter.value === 'Available') {
+    return allUnits.value.filter(unit => !unit.is_occupied)
+  } else if (availabilityFilter.value === 'Occupied') {
+    return allUnits.value.filter(unit => unit.is_occupied)
+  }
+  return allUnits.value
+})
+
+// Apply filter and reset to first page
+const applyAvailabilityFilter = () => {
+  unitsCurrentPage.value = 1
+}
+
+const totalUnitsPages = computed(() =>
+  Math.max(1, Math.ceil(filteredUnits.value.length / unitsPerPage.value))
+)
+
+const paginatedUnits = computed(() => {
+  const start = (unitsCurrentPage.value - 1) * unitsPerPage.value
+  return filteredUnits.value.slice(start, start + unitsPerPage.value)
+})
+
+const unitsPaginationInfo = computed(() => {
+  const start = (unitsCurrentPage.value - 1) * unitsPerPage.value
+  const end = Math.min(unitsCurrentPage.value * unitsPerPage.value, filteredUnits.value.length)
+  return { start: filteredUnits.value.length ? start + 1 : 0, end, total: filteredUnits.value.length }
+})
+
+const goToUnitsPrevPage = () => {
+  if (unitsCurrentPage.value > 1) unitsCurrentPage.value--
+}
+
+const goToUnitsNextPage = () => {
+  if (unitsCurrentPage.value < totalUnitsPages.value) unitsCurrentPage.value++
+}
+
+const goToUnitsPage = (page) => {
+  if (page >= 1 && page <= totalUnitsPages.value) unitsCurrentPage.value = page
 }
 
 const handleBack = () => {
@@ -68,13 +122,63 @@ const handleBack = () => {
 const handleEditProperty = () => {
   // Navigate to edit property page
   if (property.value?.id) {
-    router.push(`/landlord/properties/${property.value.id}/edit`)
+    router.push(`/landlord/prop-${property.value.id}/edit`)
   }
 }
 
 const handleAddUnit = () => {
   // Navigate to add unit page or show modal
-  router.push(`/landlord/properties/${route.params.id}/units/add`)
+  router.push(`/landlord/prop-${route.params.id}/units/add`)
+}
+
+const handleViewUnitDetails = (unitId, event) => {
+  if (event) event.stopPropagation()
+  openMenuId.value = null
+  router.push(`/landlord/prop-${route.params.id}/units/${unitId}`)
+}
+
+const toggleMenu = (unitId, event) => {
+  event.stopPropagation()
+  openMenuId.value = openMenuId.value === unitId ? null : unitId
+}
+
+const closeMenu = () => {
+  openMenuId.value = null
+}
+
+const handleShare = async (unitId, event) => {
+  event.stopPropagation()
+  const shareUrl = `${window.location.origin}/units/${unitId}/apply`
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: `Unit ${units.value.find(u => u.id === unitId)?.unitNumber} - ${property.value?.name}`,
+        text: `Check out this unit at ${property.value?.name}`,
+        url: shareUrl
+      })
+    } else {
+      await navigator.clipboard.writeText(shareUrl)
+      alert('Link copied to clipboard!')
+    }
+  } catch (err) {
+    // Fallback to clipboard
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      alert('Link copied to clipboard!')
+    } catch (clipboardErr) {
+      console.error('Failed to copy:', clipboardErr)
+    }
+  }
+  openMenuId.value = null
+}
+
+const handleGenerateQR = (unitId, event) => {
+  event.stopPropagation()
+  const unitUrl = `${window.location.origin}/units/${unitId}/apply`
+  // Open QR code generator or show QR code modal
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(unitUrl)}`
+  window.open(qrCodeUrl, '_blank')
+  openMenuId.value = null
 }
 
 const getStatusColor = (status) => {
@@ -138,16 +242,7 @@ onMounted(() => {
         <div v-else-if="property">
           <!-- Header Section -->
           <div class="header-section">
-            <div>
-              <h1 class="page-title">Property Details</h1>
-            </div>
-            <button 
-              @click="handleEditProperty"
-              class="edit-button"
-            >
-              <PencilIcon class="button-icon" />
-              <span>Edit Property</span>
-            </button>
+            <h1 class="page-title">Property Details</h1>
           </div>
 
           <!-- Property Overview Section -->
@@ -164,8 +259,17 @@ onMounted(() => {
 
               <!-- Property Information -->
               <div class="property-info">
-                <!-- Property Name -->
-                <h2 class="property-name">{{ property.name }}</h2>
+                <!-- Property Name with Edit Button -->
+                <div class="property-name-header">
+                  <h2 class="property-name">{{ property.name }}</h2>
+                  <button 
+                    @click="handleEditProperty"
+                    class="edit-button"
+                  >
+                    <PencilIcon class="button-icon" />
+                    <span>Edit Property</span>
+                  </button>
+                </div>
 
                 <!-- Status & Type Badges -->
                 <div class="badges-container">
@@ -200,7 +304,7 @@ onMounted(() => {
                   <BuildingOfficeIcon class="info-icon" />
                   <div class="info-content">
                     <p class="info-label">Total Units</p>
-                    <p class="info-value-large">{{ property.units || units.length || 0 }}</p>
+                    <p class="info-value-large">{{ property.units || allUnits.length || 0 }}</p>
                   </div>
                 </div>
 
@@ -209,7 +313,7 @@ onMounted(() => {
                   <UsersIcon class="info-icon" />
                   <div class="info-content">
                     <p class="info-label">Total Tenants</p>
-                    <p class="info-value-large">{{ property.tenants || units.filter(u => u.status === 'Occupied').length || 0 }}</p>
+                    <p class="info-value-large">{{ property.tenants || allUnits.filter(u => u.is_occupied).length || 0 }}</p>
                   </div>
                 </div>
               </div>
@@ -223,21 +327,32 @@ onMounted(() => {
           <div class="units-section">
             <div class="units-header">
               <h2 class="units-title">Units & Rooms</h2>
-              <button 
-                @click="handleAddUnit"
-                class="add-button"
-              >
-                <PlusIcon class="button-icon" />
-                <span>Add Unit</span>
-              </button>
+              <div class="units-header-actions">
+                <div class="filter-container">
+                  <select v-model="availabilityFilter" class="filter-dropdown" @change="applyAvailabilityFilter">
+                    <option value="All">All Units</option>
+                    <option value="Available">Available</option>
+                    <option value="Occupied">Occupied</option>
+                  </select>
+                  <ChevronDownIcon class="chevron-icon" />
+                </div>
+                <button 
+                  @click="handleAddUnit"
+                  class="add-button"
+                >
+                  <PlusIcon class="button-icon" />
+                  <span>Add Unit</span>
+                </button>
+              </div>
             </div>
 
             <!-- Units Grid -->
-            <div v-if="units.length > 0" class="units-grid">
+            <div v-if="filteredUnits.length > 0" class="units-grid">
               <div 
-                v-for="unit in units" 
+                v-for="unit in paginatedUnits" 
                 :key="unit.id"
                 class="unit-card"
+                @click="closeMenu"
               >
                 <!-- Unit Image -->
                 <div class="unit-image-container">
@@ -246,20 +361,57 @@ onMounted(() => {
                     :alt="`Unit ${unit.unitNumber}`"
                     class="unit-image"
                   />
-                  <!-- Gradient Overlay -->
+                  <!-- Bottom blue gradient (always visible) -->
                   <div class="unit-gradient"></div>
                   
                   <!-- Unit Info Overlay -->
                   <div class="unit-info-overlay">
-                    <h3 class="unit-number">Unit {{ unit.unitNumber }}</h3>
-                    <p class="unit-status">{{ unit.status }}</p>
+                    <div class="unit-info-content">
+                      <div>
+                        <h3 class="unit-number">Unit {{ unit.unitNumber }}</h3>
+                        <p class="unit-status">{{ unit.status }}</p>
+                      </div>
+                      <div class="unit-menu-container">
+                        <button 
+                          class="unit-menu-button"
+                          @click.stop="toggleMenu(unit.id, $event)"
+                        >
+                          <EllipsisVerticalIcon class="unit-menu-icon" />
+                        </button>
+                        <!-- Dropdown Menu -->
+                        <div 
+                          v-if="openMenuId === unit.id"
+                          class="unit-menu-dropdown"
+                          @click.stop
+                        >
+                          <button 
+                            class="unit-menu-item"
+                            @click="handleViewUnitDetails(unit.id, $event)"
+                          >
+                            View Details
+                          </button>
+                          <button 
+                            class="unit-menu-item"
+                            @click="handleShare(unit.id, $event)"
+                          >
+                            Share
+                          </button>
+                          <button 
+                            class="unit-menu-item"
+                            @click="handleGenerateQR(unit.id, $event)"
+                          >
+                            Generate QR Code
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- Empty State -->
-            <div v-else class="empty-state">
+            <div v-if="allUnits.length === 0" class="empty-state">
               <p class="empty-text">No units found for this property.</p>
               <button 
                 @click="handleAddUnit"
@@ -268,6 +420,40 @@ onMounted(() => {
                 <PlusIcon class="button-icon" />
                 <span>Add Your First Unit</span>
               </button>
+            </div>
+            <div v-else-if="filteredUnits.length === 0" class="empty-state">
+              <p class="empty-text">No {{ availabilityFilter.toLowerCase() }} units found.</p>
+            </div>
+
+            <!-- Units Pagination -->
+            <div v-if="filteredUnits.length > 0" class="units-pagination">
+              <div class="units-pagination-controls">
+                <button 
+                  class="pagination-btn" 
+                  :disabled="unitsCurrentPage === 1"
+                  @click="goToUnitsPrevPage"
+                >
+                  <ChevronLeftIcon class="chevron-pagination-icon" />
+                </button>
+                <button 
+                  v-for="page in totalUnitsPages" 
+                  :key="page"
+                  :class="['page-number', { active: unitsCurrentPage === page }]"
+                  @click="goToUnitsPage(page)"
+                >
+                  {{ page }}
+                </button>
+                <button 
+                  class="pagination-btn" 
+                  :disabled="unitsCurrentPage === totalUnitsPages"
+                  @click="goToUnitsNextPage"
+                >
+                  <ChevronRightIcon class="chevron-pagination-icon" />
+                </button>
+              </div>
+              <div class="units-pagination-info">
+                Showing {{ unitsPaginationInfo.start }} to {{ unitsPaginationInfo.end }} of {{ unitsPaginationInfo.total }} units
+              </div>
             </div>
           </div>
         </div>
@@ -291,7 +477,7 @@ onMounted(() => {
 .main-content {
   flex: 1;
   margin-left: 300px;
-  background: white;
+  background: #f0f0f0;
   min-height: 100vh;
 }
 
@@ -346,7 +532,7 @@ onMounted(() => {
 
 .retry-button {
   padding: 8px 16px;
-  background: #2563eb;
+  background: #1500FF;
   color: white;
   border: none;
   border-radius: 8px;
@@ -356,14 +542,11 @@ onMounted(() => {
 }
 
 .retry-button:hover {
-  background: #1d4ed8;
+  background: #1200e6;
 }
 
 /* Header Section */
 .header-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
   margin-bottom: 32px;
 }
 
@@ -379,7 +562,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: #2563eb;
+  background: #1500FF;
   color: white;
   border: none;
   border-radius: 8px;
@@ -390,7 +573,7 @@ onMounted(() => {
 }
 
 .edit-button:hover {
-  background: #1d4ed8;
+  background: #1200e6;
 }
 
 .button-icon {
@@ -400,11 +583,12 @@ onMounted(() => {
 
 /* Overview Section */
 .overview-section {
-  background: white;
+  background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 32px;
   margin-bottom: 32px;
+  position: relative;
 }
 
 .overview-grid {
@@ -445,10 +629,19 @@ onMounted(() => {
   justify-content: flex-start;
 }
 
+.property-name-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
 .property-name {
   font-size: 30px;
   font-weight: 700;
   color: #111827;
+  margin: 0;
+  flex: 1;
 }
 
 .badges-container {
@@ -538,7 +731,7 @@ onMounted(() => {
 
 /* Units Section */
 .units-section {
-  background: white;
+  background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 32px;
@@ -551,10 +744,56 @@ onMounted(() => {
   margin-bottom: 24px;
 }
 
+.units-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .units-title {
   font-size: 24px;
   font-weight: 700;
   color: #111827;
+}
+
+.filter-container {
+  position: relative;
+  display: inline-block;
+}
+
+.filter-dropdown {
+  appearance: none;
+  padding: 10px 36px 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  min-width: 140px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.filter-dropdown:hover {
+  border-color: #bbb;
+}
+
+.filter-dropdown:focus {
+  border-color: #1500FF;
+}
+
+.chevron-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: #666;
+  pointer-events: none;
 }
 
 .add-button,
@@ -563,7 +802,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: #2563eb;
+  background: #1500FF;
   color: white;
   border: none;
   border-radius: 8px;
@@ -575,7 +814,7 @@ onMounted(() => {
 
 .add-button:hover,
 .add-button-inline:hover {
-  background: #1d4ed8;
+  background: #1200e6;
 }
 
 .add-button-inline {
@@ -609,7 +848,6 @@ onMounted(() => {
 
 .unit-card {
   position: relative;
-  cursor: pointer;
   overflow: hidden;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -640,7 +878,9 @@ onMounted(() => {
 .unit-gradient {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(30, 58, 138, 0.8), rgba(30, 58, 138, 0.4), transparent);
+  background: linear-gradient(to top, rgba(37, 99, 235, 0.85), rgba(37, 99, 235, 0.5), transparent 50%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .unit-info-overlay {
@@ -650,12 +890,89 @@ onMounted(() => {
   right: 0;
   padding: 16px;
   color: white;
+  z-index: 3;
+}
+
+.unit-info-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.unit-menu-container {
+  position: relative;
+}
+
+.unit-menu-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  padding: 0;
+}
+
+.unit-menu-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.unit-menu-icon {
+  width: 20px;
+  height: 20px;
+  color: white;
+}
+
+.unit-menu-dropdown {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 10;
+}
+
+.unit-menu-item {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  background: white;
+  border: none;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.unit-menu-item:hover {
+  background: #f3f4f6;
+}
+
+.unit-menu-item:first-child {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.unit-menu-item:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 .unit-number {
   font-size: 24px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin: 0 0 4px 0;
 }
 
 .unit-status {
@@ -674,5 +991,83 @@ onMounted(() => {
   color: #6b7280;
   margin-bottom: 16px;
   font-size: 16px;
+}
+
+/* Units Pagination */
+.units-pagination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.units-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f9fafb;
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.units-pagination .pagination-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.units-pagination .pagination-btn:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.units-pagination .pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.units-pagination .chevron-pagination-icon {
+  width: 20px;
+  height: 20px;
+  color: #374151;
+}
+
+.units-pagination .page-number {
+  min-width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.units-pagination .page-number:hover {
+  background: #e5e7eb;
+}
+
+.units-pagination .page-number.active {
+  background: #1500FF;
+  color: white;
+  font-weight: 600;
+}
+
+.units-pagination-info {
+  font-size: 14px;
+  color: #6b7280;
 }
 </style>

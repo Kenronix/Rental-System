@@ -25,7 +25,7 @@ const handleImageLoad = () => {
 }
 
 const handleViewDetails = () => {
-  router.push(`/landlord/properties/${props.property.id}`)
+  router.push(`/landlord/prop-${props.property.id}`)
 }
 </script>
 
