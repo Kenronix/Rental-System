@@ -357,7 +357,7 @@ const submitProperty = async () => {
       
       if (response.data.success) {
         alert('Property updated successfully!')
-        router.push(`/landlord/properties/${propertyId.value}`)
+        router.push(`/landlord/prop-${propertyId.value}`)
       } else {
         alert('Failed to update property. Please try again.')
       }
