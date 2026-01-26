@@ -4,10 +4,13 @@ import LandlordDashboard from '../views/LandlordDashboard.vue'
 import LandlordProperties from '../views/LandlordProperties.vue'
 import LandlordAddnewproperty from '../views/LandlordAddnewproperty.vue'
 import LandlordPropertiesDetails from '../views/LandlordPropertiesDetails.vue'
+import LandlordAddUnit from '../views/LandlordAddUnit.vue'
+import LandlordPropertiesUnit from '../views/LandlordPropertiesUnit.vue'
 import LandlordTenants from '../views/LandlordTenants.vue'
 import LandlordPayments from '../views/LandlordPayments.vue'
 import LandlordReports from '../views/LandlordReports.vue'
 import TenantDashboard from '../views/TenantDashboard.vue'
+import TenantApplicationForm from '../views/TenantApplicationForm.vue'
 import { useAuth } from '../composables/useAuth.js'
 
 const routes = [
@@ -36,13 +39,31 @@ const routes = [
     meta: { requiresAuth: true, userType: 'landlord' }
   },
   {
-    path: '/landlord/properties/:id/edit',
+    path: '/landlord/prop-:id/edit',
     name: 'EditProperty',
     component: LandlordAddnewproperty,
     meta: { requiresAuth: true, userType: 'landlord' }
   },
   {
-    path: '/landlord/properties/:id',
+    path: '/landlord/prop-:id/units/add',
+    name: 'AddUnit',
+    component: LandlordAddUnit,
+    meta: { requiresAuth: true, userType: 'landlord' }
+  },
+  {
+    path: '/landlord/prop-:id/units/:unitId',
+    name: 'UnitDetails',
+    component: LandlordPropertiesUnit,
+    meta: { requiresAuth: true, userType: 'landlord' }
+  },
+  {
+    path: '/landlord/prop-:id/units/:unitId/edit',
+    name: 'EditUnit',
+    component: LandlordAddUnit,
+    meta: { requiresAuth: true, userType: 'landlord' }
+  },
+  {
+    path: '/landlord/prop-:id',
     name: 'PropertyDetails',
     component: LandlordPropertiesDetails,
     meta: { requiresAuth: true, userType: 'landlord' }
@@ -70,6 +91,12 @@ const routes = [
     name: 'TenantDashboard',
     component: TenantDashboard,
     meta: { requiresAuth: true, userType: 'tenant' }
+  },
+  {
+    path: '/units/:unitId/apply',
+    name: 'TenantApplication',
+    component: TenantApplicationForm,
+    meta: { requiresAuth: false }
   }
 ]
 
