@@ -22,6 +22,7 @@ class Unit extends Model{
         'advance_deposit',
         'description',
         'photos',
+        'amenities',
         'status',
         'is_occupied',
         'tenant_id',
@@ -51,5 +52,13 @@ class Unit extends Model{
     public function setPhotosAttribute($value)
     {
         $this->attributes['photos'] = $value ? json_encode($value) : null;
+    }
+    public function getAmenitiesAttribute($value)
+    {
+        return $value ? json_decode($value, true) : [];
+    }
+    public function setAmenitiesAttribute($value)
+    {
+        $this->attributes['amenities'] = $value ? json_encode($value) : null;
     }
 }
