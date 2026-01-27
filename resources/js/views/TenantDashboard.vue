@@ -1,12 +1,18 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import TenantSidebar from '../components/layout/TenantSidebar.vue'
 import { 
   BellIcon,
   DocumentTextIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  ArrowRightOnRectangleIcon
 } from '@heroicons/vue/24/outline'
 import api from '../services/api.js'
+import { useAuth } from '../composables/useAuth.js'
+
+const router = useRouter()
+const { logout: authLogout } = useAuth()
 
 const unit = ref(null)
 const currentBalance = ref(0.00)
@@ -137,6 +143,11 @@ const handleDownloadReceipt = (receiptUrl, paymentId) => {
   alert('Receipt download functionality will be implemented soon.')
 }
 
+const handleLogout = async () => {
+  await authLogout()
+  router.push('/')
+}
+
 onMounted(() => {
   fetchDashboardData()
 })
@@ -157,20 +168,6 @@ onMounted(() => {
     </div>
   </div>
 </template>
-
-<script setup>
-import { useRouter } from 'vue-router'
-import { ArrowRightOnRectangleIcon } from '@heroicons/vue/24/outline'
-import { useAuth } from '../composables/useAuth.js'
-
-const router = useRouter()
-const { logout: authLogout } = useAuth()
-
-const handleLogout = async () => {
-  await authLogout()
-  router.push('/')
-}
-</script>
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 
@@ -387,225 +384,5 @@ const handleLogout = async () => {
 .logout-icon {
   width: 20px;
   height: 20px;
-}
-</style>
-
-/* Middle Row */
-.middle-row {
-  display: grid;
-  grid-template-columns: 1fr;
-}
-
-.utility-bills-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.utility-bills-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.utility-bill-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.utility-bill-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.utility-bill-info {
-  flex: 1;
-}
-
-.utility-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 4px 0;
-}
-
-.utility-amount {
-  font-size: 18px;
-  font-weight: 700;
-  color: #111827;
-  margin: 0;
-}
-
-.utility-bill-status {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.status-paid {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.status-unpaid {
-  background: #fed7aa;
-  color: #c2410c;
-}
-
-.utility-date {
-  font-size: 12px;
-  color: #6b7280;
-  margin: 0;
-}
-
-/* Bottom Row */
-.bottom-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 24px;
-}
-
-.payment-history-card,
-.notifications-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.table-container {
-  overflow-x: auto;
-}
-
-.payment-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.payment-table thead {
-  background: #f9fafb;
-}
-
-.payment-table th {
-  padding: 12px 16px;
-  text-align: left;
-  font-size: 14px;
-  font-weight: 600;
-  color: #374151;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.payment-table td {
-  padding: 16px;
-  font-size: 14px;
-  color: #111827;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.payment-table tbody tr:hover {
-  background: #f9fafb;
-}
-
-.amount-cell {
-  font-weight: 600;
-  color: #111827;
-}
-
-.download-link {
-  background: none;
-  border: none;
-  color: #1500FF;
-  cursor: pointer;
-  padding: 4px;
-  display: inline-flex;
-  align-items: center;
-  transition: color 0.2s;
-}
-
-.download-link:hover {
-  color: #1200e6;
-}
-
-.download-icon {
-  width: 20px;
-  height: 20px;
-}
-
-/* Notifications */
-.notifications-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.notification-item {
-  display: flex;
-  gap: 12px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.notification-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.notification-icon-container {
-  flex-shrink: 0;
-}
-
-.notification-icon {
-  width: 24px;
-  height: 24px;
-  color: #1500FF;
-}
-
-.notification-content {
-  flex: 1;
-}
-
-.notification-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 4px 0;
-}
-
-.notification-message {
-  font-size: 12px;
-  color: #6b7280;
-  margin: 0;
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .top-row,
-  .bottom-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .main-content {
-    margin-left: 0;
-    padding: 20px;
-  }
-
-  .unit-details-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .table-container {
-    overflow-x: scroll;
-  }
-
-  .payment-table {
-    min-width: 600px;
-  }
 }
 </style>
