@@ -31,7 +31,6 @@ const fetchAccountSettings = async () => {
         status: 'Active',
         location: 'Cebu City',
         email: 'sarahduterte@gmail.com',
-        facebook: 'Sarah Duterte',
         phone: '+63',
         avatar: null // Will use initials if no avatar
       }
@@ -147,15 +146,6 @@ onMounted(() => {
                 </div>
               </div>
 
-              <div class="contact-item">
-                <div class="contact-icon-container facebook-icon">
-                  <span class="facebook-f">f</span>
-                </div>
-                <div class="contact-details">
-                  <p class="contact-label">Facebook</p>
-                  <p class="contact-value">{{ profile?.facebook || 'Not provided' }}</p>
-                </div>
-              </div>
 
               <div class="contact-item">
                 <div class="contact-icon-container">
@@ -447,16 +437,6 @@ onMounted(() => {
   color: white;
 }
 
-.facebook-icon {
-  background: #1877f2;
-}
-
-.facebook-f {
-  color: white;
-  font-size: 24px;
-  font-weight: 700;
-  font-family: Arial, sans-serif;
-}
 
 .contact-details {
   flex: 1;

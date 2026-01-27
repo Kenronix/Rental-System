@@ -13,7 +13,11 @@ class Payment extends Model
     protected $fillable = [
         'tenant_id',
         'unit_id',
+        'payment_type',
         'amount',
+        'water',
+        'electricity',
+        'internet',
         'payment_date',
         'due_date',
         'status',
@@ -28,6 +32,9 @@ class Payment extends Model
             'payment_date' => 'date',
             'due_date' => 'date',
             'amount' => 'decimal:2',
+            'water' => 'decimal:2',
+            'electricity' => 'decimal:2',
+            'internet' => 'decimal:2',
         ];
     }
 

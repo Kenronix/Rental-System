@@ -25,44 +25,17 @@ const fetchUtilities = async () => {
   error.value = null
   
   try {
-    // TODO: Replace with actual API endpoint
-    // const response = await api.get('/tenant/utilities')
-    // For now, using mock data based on the image
-    setTimeout(() => {
-      utilities.value = [
-        {
-          id: 1,
-          name: 'Electricity',
-          type: 'electricity',
-          amount: 84.50,
-          dueDate: '2023-10-15',
-          status: 'unpaid',
-          icon: 'electricity'
-        },
-        {
-          id: 2,
-          name: 'Water',
-          type: 'water',
-          amount: 32.00,
-          dueDate: '2023-10-05',
-          status: 'paid',
-          icon: 'water'
-        },
-        {
-          id: 3,
-          name: 'Internet',
-          type: 'internet',
-          amount: 60.00,
-          dueDate: '2023-10-01',
-          status: 'paid',
-          icon: 'internet'
-        }
-      ]
-      isLoading.value = false
-    }, 500)
+    const response = await api.get('/tenant/utilities')
+    
+    if (response.data.success) {
+      utilities.value = response.data.utilities || []
+    } else {
+      error.value = response.data.message || 'Failed to load utilities. Please try again.'
+    }
   } catch (err) {
     console.error('Error fetching utilities:', err)
-    error.value = 'Failed to load utilities. Please try again.'
+    error.value = err.response?.data?.message || 'Failed to load utilities. Please try again.'
+  } finally {
     isLoading.value = false
   }
 }
@@ -92,14 +65,18 @@ const filteredUtilities = computed(() => {
 
 const handlePayNow = async (utilityId) => {
   try {
-    // TODO: Replace with actual API endpoint
-    // await api.post(`/tenant/utilities/${utilityId}/pay`)
-    alert('Payment processing...')
-    // Refresh utilities after payment
-    await fetchUtilities()
+    const response = await api.post(`/tenant/utilities/${utilityId}/pay`)
+    
+    if (response.data.success) {
+      alert('Payment processed successfully!')
+      // Refresh utilities after payment
+      await fetchUtilities()
+    } else {
+      alert(response.data.message || 'Failed to process payment. Please try again.')
+    }
   } catch (err) {
     console.error('Error processing payment:', err)
-    alert('Failed to process payment. Please try again.')
+    alert(err.response?.data?.message || 'Failed to process payment. Please try again.')
   }
 }
 

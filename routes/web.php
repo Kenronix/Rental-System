@@ -45,6 +45,11 @@ Route::delete('/api/payments/{id}', [App\Http\Controllers\PaymentController::cla
 Route::get('/api/reports', [App\Http\Controllers\ReportController::class, 'index']);
 Route::get('/api/reports/download', [App\Http\Controllers\ReportController::class, 'download']);
 
+// API Routes for tenant (tenant only)
+Route::get('/api/tenant/rental', [App\Http\Controllers\TenantRentalController::class, 'getRental']);
+Route::get('/api/tenant/utilities', [App\Http\Controllers\TenantUtilitiesController::class, 'index']);
+Route::post('/api/tenant/utilities/{id}/pay', [App\Http\Controllers\TenantUtilitiesController::class, 'pay']);
+
 // Catch-all route for Vue.js SPA
 Route::get('/{any}', function () {
     return view('welcome');
