@@ -1,10 +1,12 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import TenantSidebar from '../components/layout/TenantSidebar.vue'
 import { 
   HomeIcon,
-  PaperAirplaneIcon
+  PaperAirplaneIcon,
+  XMarkIcon
 } from '@heroicons/vue/24/outline'
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/solid'
 import api from '../services/api.js'
 
 const rental = ref(null)
@@ -23,43 +25,25 @@ const fetchRental = async () => {
   error.value = null
   
   try {
-    // TODO: Replace with actual API endpoint
-    // const response = await api.get('/tenant/rental')
-    // For now, using mock data based on the image
-    setTimeout(() => {
-      rental.value = {
-        id: 1,
-        property_name: 'Sunshine Condominium',
-        address: 'Inayawan, Lawaan II Cebu',
-        unit_number: '402',
-        status: 'Active Lease',
-        bedrooms: 2,
-        bathrooms: 1,
-        monthly_rent: 1200.00,
-        security_deposit: 1200.00,
-        lease_start: '2025-08-01',
-        lease_end: '2026-07-31',
-        photos: [
-          'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&h=600&fit=crop',
-          'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=400&fit=crop',
-          'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&h=400&fit=crop',
-          'https://images.unsplash.com/photo-1484154218962-a197022b5858?w=400&h=400&fit=crop',
-          'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=400&h=400&fit=crop'
+    const response = await api.get('/tenant/rental')
+    
+    if (response.data.success) {
+      rental.value = response.data.rental
+      landlord.value = response.data.landlord
+      
+      // If no photos, use placeholder
+      if (!rental.value.photos || rental.value.photos.length === 0) {
+        rental.value.photos = [
+          'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&h=600&fit=crop'
         ]
       }
-      
-      landlord.value = {
-        id: 1,
-        name: 'Sarah Landlord',
-        role: 'Property Manager',
-        avatar: 'SL'
-      }
-      
-      isLoading.value = false
-    }, 500)
+    } else {
+      error.value = response.data.message || 'Failed to load rental details.'
+    }
   } catch (err) {
     console.error('Error fetching rental:', err)
-    error.value = 'Failed to load rental details. Please try again.'
+    error.value = err.response?.data?.message || 'Failed to load rental details. Please try again.'
+  } finally {
     isLoading.value = false
   }
 }
@@ -72,14 +56,14 @@ const formatCurrency = (amount) => {
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A'
   const date = new Date(dateString)
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
 }
 
 const formatDateShort = (dateString) => {
   if (!dateString) return 'N/A'
   const date = new Date(dateString)
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   return `${months[date.getMonth()]} ${date.getFullYear()}`
 }
 
@@ -106,6 +90,57 @@ const sendMessage = async () => {
     isSendingMessage.value = false
   }
 }
+
+// Photo viewer functions
+const openPhotoViewer = (index) => {
+  currentPhotoIndex.value = index
+  showPhotoViewer.value = true
+}
+
+const closePhotoViewer = () => {
+  showPhotoViewer.value = false
+}
+
+const nextPhoto = () => {
+  if (rental.value && rental.value.photos) {
+    currentPhotoIndex.value = (currentPhotoIndex.value + 1) % rental.value.photos.length
+  }
+}
+
+const prevPhoto = () => {
+  if (rental.value && rental.value.photos) {
+    currentPhotoIndex.value = currentPhotoIndex.value === 0 
+      ? rental.value.photos.length - 1 
+      : currentPhotoIndex.value - 1
+  }
+}
+
+// Computed properties for photos
+const thumbnailPhotos = computed(() => {
+  if (!rental.value || !rental.value.photos) return []
+  // Show photos 2-4 (3 thumbnails)
+  return rental.value.photos.slice(1, 4)
+})
+
+const hasMorePhotos = computed(() => {
+  return rental.value && rental.value.photos && rental.value.photos.length > 4
+})
+
+const remainingPhotosCount = computed(() => {
+  if (!rental.value || !rental.value.photos) return 0
+  // Count photos beyond the first 4 (main + 3 thumbnails)
+  return Math.max(0, rental.value.photos.length - 4)
+})
+
+const fourthThumbnailPhoto = computed(() => {
+  if (!rental.value || !rental.value.photos || rental.value.photos.length < 5) return null
+  return rental.value.photos[4] // 5th photo (index 4)
+})
+
+const currentPhoto = computed(() => {
+  if (!rental.value || !rental.value.photos || rental.value.photos.length === 0) return null
+  return rental.value.photos[currentPhotoIndex.value]
+})
 
 onMounted(() => {
   fetchRental()
@@ -135,7 +170,7 @@ onMounted(() => {
         <!-- Property Images Section -->
         <div class="images-section">
           <!-- Main Large Image -->
-          <div class="main-image-container">
+          <div class="main-image-container" @click="openPhotoViewer(0)">
             <img 
               v-if="rental.photos && rental.photos.length > 0"
               :src="rental.photos[0]"
@@ -150,13 +185,30 @@ onMounted(() => {
           <!-- Thumbnail Grid -->
           <div v-if="rental.photos && rental.photos.length > 1" class="thumbnail-grid">
             <div
-              v-for="(photo, index) in rental.photos.slice(1, 5)"
+              v-for="(photo, index) in thumbnailPhotos"
               :key="index"
               class="thumbnail-item"
+              @click="openPhotoViewer(index + 1)"
             >
               <img 
                 :src="photo"
                 :alt="`Property image ${index + 2}`"
+                class="thumbnail-image"
+              />
+            </div>
+            <!-- 4th thumbnail with "+ More" if there are 5+ photos -->
+            <div
+              v-if="hasMorePhotos"
+              class="thumbnail-item thumbnail-more"
+              @click="openPhotoViewer(4)"
+            >
+              <div class="more-overlay">
+                <span class="more-text">+{{ remainingPhotosCount }} More</span>
+              </div>
+              <img 
+                v-if="fourthThumbnailPhoto"
+                :src="fourthThumbnailPhoto"
+                alt="More photos"
                 class="thumbnail-image"
               />
             </div>
@@ -200,7 +252,7 @@ onMounted(() => {
               </div>
               <div class="detail-row">
                 <span class="detail-label">Lease End:</span>
-                <span class="detail-value">{{ formatDateShort(rental.lease_end) }}</span>
+                <span class="detail-value">{{ formatDate(rental.lease_end) }}</span>
               </div>
             </div>
           </div>
@@ -234,12 +286,33 @@ onMounted(() => {
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Pagination -->
-        <div class="pagination-section">
-          <div class="pagination-info">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalItems) }} of {{ totalItems }} results
+      <!-- Photo Viewer Modal -->
+      <div v-if="showPhotoViewer && rental && rental.photos" class="photo-viewer-overlay" @click.self="closePhotoViewer">
+        <div class="photo-viewer-container">
+          <button class="close-viewer-btn" @click="closePhotoViewer">
+            <XMarkIcon class="close-icon" />
+          </button>
+          
+          <button class="nav-btn nav-btn-prev" @click="prevPhoto">
+            <ChevronLeftIcon class="nav-icon" />
+          </button>
+          
+          <div class="photo-viewer-content">
+            <img 
+              :src="currentPhoto"
+              :alt="`Property image ${currentPhotoIndex + 1}`"
+              class="viewer-image"
+            />
+            <div class="photo-counter">
+              {{ currentPhotoIndex + 1 }} / {{ rental.photos.length }}
+            </div>
           </div>
+          
+          <button class="nav-btn nav-btn-next" @click="nextPhoto">
+            <ChevronRightIcon class="nav-icon" />
+          </button>
         </div>
       </div>
     </div>
@@ -315,12 +388,20 @@ onMounted(() => {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.main-image-container:hover {
+  transform: scale(1.01);
 }
 
 .main-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  cursor: pointer;
+  user-select: none;
 }
 
 .image-placeholder {
@@ -347,6 +428,7 @@ onMounted(() => {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: transform 0.2s;
+  position: relative;
 }
 
 .thumbnail-item:hover {
@@ -357,6 +439,143 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  cursor: pointer;
+  user-select: none;
+  pointer-events: none;
+}
+
+.thumbnail-more {
+  position: relative;
+}
+
+.more-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.more-text {
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Photo Viewer Modal */
+.photo-viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.photo-viewer-container {
+  position: relative;
+  width: 90%;
+  max-width: 1200px;
+  height: 90vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-viewer-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1001;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.close-viewer-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.close-icon {
+  width: 24px;
+  height: 24px;
+  color: white;
+}
+
+.nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  z-index: 1001;
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.nav-btn-prev {
+  left: 20px;
+}
+
+.nav-btn-next {
+  right: 20px;
+}
+
+.nav-icon {
+  width: 30px;
+  height: 30px;
+  color: white;
+}
+
+.photo-viewer-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-image {
+  max-width: 100%;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.photo-counter {
+  margin-top: 20px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'Montserrat', sans-serif;
 }
 
 /* Details Section */

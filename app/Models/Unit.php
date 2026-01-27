@@ -61,4 +61,12 @@ class Unit extends Model{
     {
         $this->attributes['amenities'] = $value ? json_encode($value) : null;
     }
+
+    protected function casts(): array
+    {
+        return [
+            'lease_start' => 'date',
+            'lease_end' => 'date',
+        ];
+    }
 }

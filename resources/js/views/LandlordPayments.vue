@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onActivated } from 'vue'
+import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import Sidebar from '../components/layout/Sidebar.vue'
 import { 
   MagnifyingGlassIcon,
@@ -43,7 +43,11 @@ const itemsPerPage = ref(10)
 const formData = ref({
   tenant_id: '',
   unit_id: '',
+  payment_type: 'rent',
   amount: '',
+  water: '',
+  electricity: '',
+  internet: '',
   payment_date: '',
   due_date: '',
   status: 'pending',
@@ -186,7 +190,11 @@ const openAddPaymentModal = () => {
   formData.value = {
     tenant_id: '',
     unit_id: '',
+    payment_type: 'rent',
     amount: '',
+    water: '',
+    electricity: '',
+    internet: '',
     payment_date: new Date().toISOString().split('T')[0],
     due_date: '',
     status: 'pending',
@@ -204,7 +212,11 @@ const openEditPaymentModal = (payment) => {
   formData.value = {
     tenant_id: payment.tenant_id.toString(),
     unit_id: payment.unit_id.toString(),
+    payment_type: payment.payment_type || 'rent',
     amount: payment.amount.toString(),
+    water: payment.water ? payment.water.toString() : '',
+    electricity: payment.electricity ? payment.electricity.toString() : '',
+    internet: payment.internet ? payment.internet.toString() : '',
     payment_date: payment.payment_date || '',
     due_date: payment.due_date || '',
     status: payment.status,
@@ -223,7 +235,11 @@ const closePaymentModal = () => {
   formData.value = {
     tenant_id: '',
     unit_id: '',
+    payment_type: 'rent',
     amount: '',
+    water: '',
+    electricity: '',
+    internet: '',
     payment_date: new Date().toISOString().split('T')[0],
     due_date: '',
     status: 'pending',
@@ -242,6 +258,26 @@ const handleTenantChange = () => {
   }
 }
 
+// Auto-calculate total amount for utilities
+const calculateUtilityTotal = () => {
+  if (formData.value.payment_type === 'utility') {
+    const water = parseFloat(formData.value.water) || 0
+    const electricity = parseFloat(formData.value.electricity) || 0
+    const internet = parseFloat(formData.value.internet) || 0
+    const total = water + electricity + internet
+    if (total > 0) {
+      formData.value.amount = total.toFixed(2)
+    }
+  }
+}
+
+// Watch utility fields to auto-calculate total
+watch([() => formData.value.water, () => formData.value.electricity, () => formData.value.internet, () => formData.value.payment_type], () => {
+  if (formData.value.payment_type === 'utility') {
+    calculateUtilityTotal()
+  }
+})
+
 // Submit payment
 const submitPayment = async () => {
   formErrors.value = {}
@@ -251,7 +287,11 @@ const submitPayment = async () => {
     const payload = {
       tenant_id: parseInt(formData.value.tenant_id),
       unit_id: parseInt(formData.value.unit_id),
+      payment_type: formData.value.payment_type,
       amount: parseFloat(formData.value.amount),
+      water: formData.value.payment_type === 'utility' && formData.value.water ? parseFloat(formData.value.water) : null,
+      electricity: formData.value.payment_type === 'utility' && formData.value.electricity ? parseFloat(formData.value.electricity) : null,
+      internet: formData.value.payment_type === 'utility' && formData.value.internet ? parseFloat(formData.value.internet) : null,
       payment_date: formData.value.payment_date,
       due_date: formData.value.due_date,
       status: formData.value.status,
@@ -408,7 +448,9 @@ onActivated(() => {
           <thead>
             <tr>
               <th>Tenant</th>
-              <th>Property / Unit</th>
+              <th>Property</th>
+              <th>Unit</th>
+              <th>Type</th>
               <th>Amount</th>
               <th>Payment Date</th>
               <th>Due Date</th>
@@ -420,7 +462,7 @@ onActivated(() => {
           </thead>
           <tbody>
             <tr v-if="paginatedPayments.length === 0">
-              <td colspan="9" class="empty-state">
+              <td colspan="10" class="empty-state">
                 No payments found
               </td>
             </tr>
@@ -434,8 +476,17 @@ onActivated(() => {
               <td>
                 <div class="property-info">
                   <div class="property-name">{{ payment.property_name }}</div>
+                </div>
+              </td>
+              <td>
+                <div class="unit-info">
                   <div class="unit-number">Unit {{ payment.unit_number }}</div>
                 </div>
+              </td>
+              <td>
+                <span :class="['type-badge', payment.payment_type === 'rent' ? 'type-rent' : 'type-utility']">
+                  {{ payment.payment_type === 'rent' ? 'Rent' : 'Utility' }}
+                </span>
               </td>
               <td class="amount-cell">{{ formatCurrency(payment.amount) }}</td>
               <td>{{ formatDate(payment.payment_date) }}</td>
@@ -526,8 +577,63 @@ onActivated(() => {
               <span v-if="formErrors.unit_id" class="error-message">{{ formErrors.unit_id[0] }}</span>
             </div>
 
+            <div class="form-group">
+              <label>Payment Type <span class="required">*</span></label>
+              <select 
+                v-model="formData.payment_type" 
+                :class="{ 'error': formErrors.payment_type }"
+                required
+              >
+                <option value="rent">Rent</option>
+                <option value="utility">Utility</option>
+              </select>
+              <span v-if="formErrors.payment_type" class="error-message">{{ formErrors.payment_type[0] }}</span>
+            </div>
+
+            <!-- Utility Fields (shown only when payment_type is utility) -->
+            <div v-if="formData.payment_type === 'utility'" class="utility-fields">
+              <h3 class="utility-section-title">Utility Breakdown</h3>
+              <div class="form-row three-columns">
+                <div class="form-group">
+                  <label>Water</label>
+                  <input 
+                    type="number" 
+                    v-model="formData.water" 
+                    step="0.01"
+                    min="0"
+                    :class="{ 'error': formErrors.water }"
+                  />
+                  <span v-if="formErrors.water" class="error-message">{{ formErrors.water[0] }}</span>
+                </div>
+
+                <div class="form-group">
+                  <label>Electricity</label>
+                  <input 
+                    type="number" 
+                    v-model="formData.electricity" 
+                    step="0.01"
+                    min="0"
+                    :class="{ 'error': formErrors.electricity }"
+                  />
+                  <span v-if="formErrors.electricity" class="error-message">{{ formErrors.electricity[0] }}</span>
+                </div>
+
+                <div class="form-group">
+                  <label>Internet</label>
+                  <input 
+                    type="number" 
+                    v-model="formData.internet" 
+                    step="0.01"
+                    min="0"
+                    :class="{ 'error': formErrors.internet }"
+                  />
+                  <span v-if="formErrors.internet" class="error-message">{{ formErrors.internet[0] }}</span>
+                </div>
+              </div>
+            </div>
+
             <div class="form-row">
-              <div class="form-group">
+              <div v-if="formData.payment_type === 'rent'" class="form-group">
                 <label>Amount <span class="required">*</span></label>
                 <input 
                   type="number" 
@@ -537,6 +643,21 @@ onActivated(() => {
                   :class="{ 'error': formErrors.amount }"
                   required
                 />
+                <span v-if="formErrors.amount" class="error-message">{{ formErrors.amount[0] }}</span>
+              </div>
+
+              <div v-if="formData.payment_type === 'utility'" class="form-group">
+                <label>Total Amount <span class="required">*</span></label>
+                <input 
+                  type="number" 
+                  v-model="formData.amount" 
+                  step="0.01"
+                  min="0"
+                  :class="{ 'error': formErrors.amount }"
+                  readonly
+                  style="background-color: #f3f4f6; cursor: not-allowed;"
+                />
+                <span class="helper-text">Auto-calculated from utility breakdown</span>
                 <span v-if="formErrors.amount" class="error-message">{{ formErrors.amount[0] }}</span>
               </div>
 
@@ -902,6 +1023,12 @@ onActivated(() => {
   color: #1a1a1a;
 }
 
+.unit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .unit-number {
   font-size: 12px;
   color: #666;
@@ -1130,6 +1257,42 @@ onActivated(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+}
+
+.form-row.three-columns {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.utility-fields {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.utility-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 16px 0;
+}
+
+.type-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.type-rent {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.type-utility {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .form-actions {

@@ -67,7 +67,11 @@ class PaymentController extends Controller
                 'unit_number' => $unit->unit_number,
                 'property_id' => $property ? $property->id : null,
                 'property_name' => $property ? $property->name : 'N/A',
+                'payment_type' => $payment->payment_type ?? 'rent',
                 'amount' => (float) $payment->amount,
+                'water' => $payment->water ? (float) $payment->water : null,
+                'electricity' => $payment->electricity ? (float) $payment->electricity : null,
+                'internet' => $payment->internet ? (float) $payment->internet : null,
                 'payment_date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
                 'due_date' => $payment->due_date ? $payment->due_date->format('Y-m-d') : null,
                 'status' => $payment->status,
@@ -121,7 +125,11 @@ class PaymentController extends Controller
         $validated = $request->validate([
             'tenant_id' => 'required|exists:tenants,id',
             'unit_id' => 'required|exists:units,id',
+            'payment_type' => 'required|in:rent,utility',
             'amount' => 'required|numeric|min:0',
+            'water' => 'nullable|numeric|min:0',
+            'electricity' => 'nullable|numeric|min:0',
+            'internet' => 'nullable|numeric|min:0',
             'payment_date' => 'required|date',
             'due_date' => 'required|date|after_or_equal:payment_date',
             'status' => 'required|in:paid,pending,overdue',
@@ -197,7 +205,11 @@ class PaymentController extends Controller
         }
 
         $validated = $request->validate([
+            'payment_type' => 'sometimes|in:rent,utility',
             'amount' => 'sometimes|numeric|min:0',
+            'water' => 'nullable|numeric|min:0',
+            'electricity' => 'nullable|numeric|min:0',
+            'internet' => 'nullable|numeric|min:0',
             'payment_date' => 'sometimes|date',
             'due_date' => 'sometimes|date|after_or_equal:payment_date',
             'status' => 'sometimes|in:paid,pending,overdue',
