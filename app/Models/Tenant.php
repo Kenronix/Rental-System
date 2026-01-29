@@ -62,4 +62,12 @@ class Tenant extends Authenticatable
     {
         return $this->hasMany(TenantApplication::class, 'email', 'email');
     }
+
+    /**
+     * Get the notifications for this tenant.
+     */
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(Notification::class);
+    }
 }
