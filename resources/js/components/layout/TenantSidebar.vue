@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   HomeIcon,
@@ -11,17 +11,24 @@ import {
   UserCircleIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/vue/24/solid'
+import { BellIcon } from '@heroicons/vue/24/outline'
 import tahananLogo from '../../images/tahananLogo.png'
 import tahananLogoName from '../../images/tahananLogoName.png'
 import sidebarBg from '../../images/Sidebarbg.png'
 import { useAuth } from '../../composables/useAuth.js'
+import api from '../../services/api.js'
 
 const route = useRoute()
 const router = useRouter()
 const { logout: authLogout, user } = useAuth()
 
 const showSettingsMenu = ref(false)
+const showNotificationsMenu = ref(false)
 const settingsMenuRef = ref(null)
+const notificationsMenuRef = ref(null)
+const notifications = ref([])
+const unreadCount = ref(0)
+const isLoadingNotifications = ref(false)
 
 const navigationItems = [
   { name: 'Dashboard', icon: HomeIcon, path: '/tenant/dashboard' },
@@ -37,6 +44,75 @@ const isActive = (path) => {
 
 const toggleSettingsMenu = () => {
   showSettingsMenu.value = !showSettingsMenu.value
+  if (showSettingsMenu.value) {
+    showNotificationsMenu.value = false
+  }
+}
+
+const toggleNotificationsMenu = () => {
+  showNotificationsMenu.value = !showNotificationsMenu.value
+  if (showNotificationsMenu.value) {
+    showSettingsMenu.value = false
+    fetchNotifications()
+  }
+}
+
+const fetchNotifications = async () => {
+  isLoadingNotifications.value = true
+  try {
+    const response = await api.get('/tenant/notifications')
+    if (response.data.success) {
+      notifications.value = response.data.notifications || []
+      unreadCount.value = response.data.unread_count || 0
+    }
+  } catch (err) {
+    console.error('Error fetching notifications:', err)
+  } finally {
+    isLoadingNotifications.value = false
+  }
+}
+
+const markAsRead = async (notificationId) => {
+  try {
+    await api.put(`/tenant/notifications/${notificationId}/read`)
+    const notification = notifications.value.find(n => n.id === notificationId)
+    if (notification) {
+      notification.is_read = true
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    }
+  } catch (err) {
+    console.error('Error marking notification as read:', err)
+  }
+}
+
+const markAllAsRead = async () => {
+  try {
+    await api.put('/tenant/notifications/read-all')
+    notifications.value.forEach(n => {
+      n.is_read = true
+    })
+    unreadCount.value = 0
+  } catch (err) {
+    console.error('Error marking all notifications as read:', err)
+  }
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'Just now'
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now - date
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+  
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${months[date.getMonth()]} ${date.getDate()}`
 }
 
 const handleAccountSettings = () => {
@@ -54,14 +130,25 @@ const handleClickOutside = (event) => {
   if (settingsMenuRef.value && !settingsMenuRef.value.contains(event.target)) {
     showSettingsMenu.value = false
   }
+  if (notificationsMenuRef.value && !notificationsMenuRef.value.contains(event.target)) {
+    showNotificationsMenu.value = false
+  }
 }
+
+let notificationInterval = null
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  fetchNotifications()
+  // Poll for new notifications every 30 seconds
+  notificationInterval = setInterval(fetchNotifications, 30000)
 })
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  if (notificationInterval) {
+    clearInterval(notificationInterval)
+  }
 })
 </script>
 
@@ -93,20 +180,57 @@ onUnmounted(() => {
         <div class="user-name">{{ user ? user.name : 'User' }}</div>
         <div class="user-role">Tenant</div>
       </div>
-      <div class="settings-container" ref="settingsMenuRef">
-        <Cog6ToothIcon class="settings-icon" @click="toggleSettingsMenu" />
-        <Transition name="dropdown">
-          <div v-if="showSettingsMenu" class="settings-menu">
-            <button class="menu-item" @click="handleAccountSettings">
-              <UserCircleIcon class="menu-icon" />
-              <span>Account Settings</span>
-            </button>
-            <button class="menu-item" @click="handleLogout">
-              <ArrowRightOnRectangleIcon class="menu-icon" />
-              <span>Logout</span>
-            </button>
+      <div class="actions-container">
+        <!-- Notifications -->
+        <div class="notifications-container" ref="notificationsMenuRef">
+          <div class="notification-icon-wrapper" @click="toggleNotificationsMenu">
+            <BellIcon class="notification-icon" />
+            <span v-if="unreadCount > 0" class="notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
           </div>
-        </Transition>
+          <Transition name="dropdown">
+            <div v-if="showNotificationsMenu" class="notifications-menu">
+              <div class="notifications-header">
+                <h3>Notifications</h3>
+                <button v-if="unreadCount > 0" class="mark-all-read-btn" @click="markAllAsRead">Mark all as read</button>
+              </div>
+              <div class="notifications-list">
+                <div v-if="isLoadingNotifications" class="notification-loading">Loading...</div>
+                <div v-else-if="notifications.length === 0" class="notification-empty">No notifications</div>
+                <div
+                  v-else
+                  v-for="notification in notifications"
+                  :key="notification.id"
+                  :class="['notification-item', { 'unread': !notification.is_read }]"
+                  @click="markAsRead(notification.id)"
+                >
+                  <div class="notification-content">
+                    <div class="notification-title">{{ notification.title }}</div>
+                    <div class="notification-message">{{ notification.message }}</div>
+                    <div class="notification-time">{{ formatDate(notification.created_at) }}</div>
+                  </div>
+                  <div v-if="!notification.is_read" class="notification-dot"></div>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+        
+        <!-- Settings -->
+        <div class="settings-container" ref="settingsMenuRef">
+          <Cog6ToothIcon class="settings-icon" @click="toggleSettingsMenu" />
+          <Transition name="dropdown">
+            <div v-if="showSettingsMenu" class="settings-menu">
+              <button class="menu-item" @click="handleAccountSettings">
+                <UserCircleIcon class="menu-icon" />
+                <span>Account Settings</span>
+              </button>
+              <button class="menu-item" @click="handleLogout">
+                <ArrowRightOnRectangleIcon class="menu-icon" />
+                <span>Logout</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
     </div>
   </div>
@@ -244,9 +368,161 @@ onUnmounted(() => {
   font-weight: 400;
 }
 
+.actions-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.notifications-container {
+  position: relative;
+}
+
+.notification-icon-wrapper {
+  position: relative;
+  cursor: pointer;
+}
+
+.notification-icon {
+  width: 20px;
+  height: 20px;
+  color: white;
+  transition: color 0.2s;
+}
+
+.notification-icon:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+.notifications-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 10px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 320px;
+  max-height: 400px;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.notifications-header {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notifications-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.mark-all-read-btn {
+  background: none;
+  border: none;
+  color: #1500FF;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.mark-all-read-btn:hover {
+  background: #f3f4f6;
+}
+
+.notifications-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.notification-loading,
+.notification-empty {
+  padding: 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.notification-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  transition: background-color 0.2s;
+}
+
+.notification-item:hover {
+  background: #f9fafb;
+}
+
+.notification-item.unread {
+  background: #eff6ff;
+}
+
+.notification-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.notification-message {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.notification-time {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  background: #1500FF;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
 .settings-container {
   position: relative;
-  flex-shrink: 0;
 }
 
 .settings-icon {
