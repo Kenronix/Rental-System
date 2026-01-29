@@ -27,60 +27,68 @@ class TenantUtilitiesController extends Controller
         // Get all utility payments for this tenant
         $utilityPayments = Payment::where('tenant_id', $tenant->id)
             ->where('payment_type', 'utility')
-            ->orderBy('due_date', 'desc')
+            ->orderBy('created_at', 'desc')
             ->get();
 
-        // Transform payments into utility items
+        // Transform payments into grouped utility items
         $utilities = [];
+        $paymentHistory = [];
         
         foreach ($utilityPayments as $payment) {
-            // Create separate utility items for each utility type that has a value
-            if ($payment->water && $payment->water > 0) {
-                $utilities[] = [
-                    'id' => $payment->id . '_water',
-                    'payment_id' => $payment->id,
-                    'name' => 'Water',
-                    'type' => 'water',
-                    'amount' => (float) $payment->water,
-                    'dueDate' => $payment->due_date ? $payment->due_date->format('Y-m-d') : null,
-                    'status' => $payment->status === 'paid' ? 'paid' : 'unpaid',
-                    'icon' => 'water',
-                    'payment_date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
-                ];
-            }
+            // Calculate total amount
+            $totalAmount = (float) ($payment->water ?? 0) + (float) ($payment->electricity ?? 0) + (float) ($payment->internet ?? 0);
+            
+            if ($totalAmount > 0) {
+                // Build breakdown
+                $breakdown = [];
+                if ($payment->water && $payment->water > 0) {
+                    $breakdown[] = [
+                        'name' => 'Water',
+                        'amount' => (float) $payment->water,
+                    ];
+                }
+                if ($payment->electricity && $payment->electricity > 0) {
+                    $breakdown[] = [
+                        'name' => 'Electricity',
+                        'amount' => (float) $payment->electricity,
+                    ];
+                }
+                if ($payment->internet && $payment->internet > 0) {
+                    $breakdown[] = [
+                        'name' => 'Internet',
+                        'amount' => (float) $payment->internet,
+                    ];
+                }
 
-            if ($payment->electricity && $payment->electricity > 0) {
-                $utilities[] = [
-                    'id' => $payment->id . '_electricity',
+                $utilityItem = [
+                    'id' => $payment->id,
                     'payment_id' => $payment->id,
-                    'name' => 'Electricity',
-                    'type' => 'electricity',
-                    'amount' => (float) $payment->electricity,
+                    'name' => 'Utilities',
+                    'amount' => $totalAmount,
+                    'breakdown' => $breakdown,
                     'dueDate' => $payment->due_date ? $payment->due_date->format('Y-m-d') : null,
                     'status' => $payment->status === 'paid' ? 'paid' : 'unpaid',
-                    'icon' => 'electricity',
+                    'review_status' => $payment->review_status,
                     'payment_date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
+                    'payment_method' => $payment->payment_method,
+                    'reference_number' => $payment->reference_number,
+                    'created_at' => $payment->created_at ? $payment->created_at->format('Y-m-d H:i:s') : null,
                 ];
-            }
 
-            if ($payment->internet && $payment->internet > 0) {
-                $utilities[] = [
-                    'id' => $payment->id . '_internet',
-                    'payment_id' => $payment->id,
-                    'name' => 'Internet',
-                    'type' => 'internet',
-                    'amount' => (float) $payment->internet,
-                    'dueDate' => $payment->due_date ? $payment->due_date->format('Y-m-d') : null,
-                    'status' => $payment->status === 'paid' ? 'paid' : 'unpaid',
-                    'icon' => 'internet',
-                    'payment_date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
-                ];
+                // Add to utilities list if unpaid or pending review
+                if ($payment->status !== 'paid' || $payment->review_status === 'pending_review') {
+                    $utilities[] = $utilityItem;
+                }
+
+                // Add to payment history
+                $paymentHistory[] = $utilityItem;
             }
         }
 
         return response()->json([
             'success' => true,
             'utilities' => $utilities,
+            'payment_history' => $paymentHistory,
         ]);
     }
 
@@ -98,18 +106,14 @@ class TenantUtilitiesController extends Controller
             ], 401);
         }
 
-        // Extract payment_id and utility type from the id (format: payment_id_type)
-        $parts = explode('_', $id);
-        if (count($parts) < 2) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid utility ID',
-            ], 400);
+        // Handle both old format (payment_id_type) and new format (just payment_id)
+        $paymentId = $id;
+        if (strpos($id, '_') !== false) {
+            $parts = explode('_', $id);
+            $paymentId = $parts[0];
         }
-
-        $paymentId = $parts[0];
         
-        // Find the payment - check both utility type payments and payments that might have utilities
+        // Find the payment
         $payment = Payment::where('id', $paymentId)
             ->where('tenant_id', $tenant->id)
             ->first();
@@ -151,17 +155,14 @@ class TenantUtilitiesController extends Controller
         $payment->notes = $request->notes;
         $payment->payment_date = now();
         
+        // When payment proof is uploaded, set review_status to pending_review
         if ($paymentProofPath) {
             $payment->payment_proof = $paymentProofPath;
-        }
-
-        // Set review status to pending_review for online payments or when proof is uploaded
-        if ($request->payment_method === 'online' || $paymentProofPath) {
             $payment->review_status = 'pending_review';
             // Keep status as pending until landlord reviews
             $payment->status = 'pending';
         } else {
-            // For cash payments without proof, mark as pending_review as well
+            // For payments without proof, also mark as pending_review
             $payment->review_status = 'pending_review';
             $payment->status = 'pending';
         }
