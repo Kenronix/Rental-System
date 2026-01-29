@@ -44,6 +44,14 @@ Route::delete('/api/payments/{id}', [App\Http\Controllers\PaymentController::cla
 // API Routes for reports (landlord only)
 Route::get('/api/reports', [App\Http\Controllers\ReportController::class, 'index']);
 Route::get('/api/reports/download', [App\Http\Controllers\ReportController::class, 'download']);
+Route::get('/api/reports/download-pdf', [App\Http\Controllers\ReportController::class, 'downloadPdf']);
+Route::get('/api/reports/download-properties-csv', [App\Http\Controllers\ReportController::class, 'downloadPropertiesCsv']);
+Route::get('/api/reports/download-properties-pdf', [App\Http\Controllers\ReportController::class, 'downloadPropertiesPdf']);
+Route::get('/api/reports/download-units-csv', [App\Http\Controllers\ReportController::class, 'downloadUnitsCsv']);
+Route::get('/api/reports/download-units-pdf', [App\Http\Controllers\ReportController::class, 'downloadUnitsPdf']);
+Route::get('/api/reports/download-tenants-csv', [App\Http\Controllers\ReportController::class, 'downloadTenantsCsv']);
+Route::get('/api/reports/download-tenants-pdf', [App\Http\Controllers\ReportController::class, 'downloadTenantsPdf']);
+Route::get('/api/reports/download-tenant-profile-pdf/{id}', [App\Http\Controllers\ReportController::class, 'downloadTenantProfilePdf']);
 
 // API Routes for tenant (tenant only)
 Route::get('/api/tenant/rental', [App\Http\Controllers\TenantRentalController::class, 'getRental']);
