@@ -1,0 +1,38 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('payments', function (Blueprint $table) {
+            if (!Schema::hasColumn('payments', 'payment_proof')) {
+                $table->string('payment_proof')->nullable()->after('reference_number');
+            }
+            if (!Schema::hasColumn('payments', 'review_status')) {
+                $table->enum('review_status', ['pending_review', 'approved', 'rejected'])->nullable()->default(null)->after('status');
+            }
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('payments', function (Blueprint $table) {
+            if (Schema::hasColumn('payments', 'payment_proof')) {
+                $table->dropColumn('payment_proof');
+            }
+            if (Schema::hasColumn('payments', 'review_status')) {
+                $table->dropColumn('review_status');
+            }
+        });
+    }
+};
