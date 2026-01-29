@@ -9,7 +9,8 @@ import {
   EnvelopeIcon,
   XMarkIcon,
   TrashIcon,
-  KeyIcon
+  KeyIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/vue/24/outline'
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/vue/24/solid'
 import api from '../services/api.js'
@@ -281,6 +282,150 @@ const openTenantModal = async (tenantId, unitId) => {
 const closeTenantModal = () => {
   showTenantModal.value = false
   selectedTenant.value = null
+}
+
+// Download tenant profile PDF
+const downloadTenantProfilePdf = async () => {
+  if (!selectedTenant.value || !selectedTenant.value.id) return
+  
+  try {
+    const response = await api.get(`/reports/download-tenant-profile-pdf/${selectedTenant.value.id}`, {
+      responseType: 'blob'
+    })
+    
+    // Check if response is PDF or HTML
+    const contentType = response.headers['content-type'] || ''
+    
+    if (contentType.includes('application/pdf')) {
+      // It's a real PDF, download it directly
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const tenantName = selectedTenant.value.name.replace(/\s+/g, '_')
+      link.href = url
+      link.setAttribute('download', `tenant_profile_${tenantName}_${new Date().toISOString().slice(0, 10)}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } else {
+      // It's HTML, convert to PDF using html2pdf.js
+      const blob = new Blob([response.data], { type: 'text/html' })
+      const reader = new FileReader()
+      
+      reader.onload = async (e) => {
+        const htmlContent = e.target.result
+        
+        // Load html2pdf.js from CDN if not already loaded
+        if (!window.html2pdf) {
+          const script = document.createElement('script')
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
+          await new Promise((resolve) => {
+            script.onload = resolve
+            document.head.appendChild(script)
+          })
+        }
+        
+        await convertHtmlToPdf(htmlContent, `tenant_profile_${selectedTenant.value.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`)
+      }
+      
+      reader.readAsText(blob)
+      
+      async function convertHtmlToPdf(html, pdfFilename) {
+        try {
+          // Create an iframe to properly render the HTML document
+          const iframe = document.createElement('iframe')
+          iframe.style.position = 'fixed'
+          iframe.style.left = '0'
+          iframe.style.top = '0'
+          iframe.style.width = '210mm'
+          iframe.style.height = '297mm'
+          iframe.style.border = 'none'
+          iframe.style.opacity = '0'
+          iframe.style.pointerEvents = 'none'
+          document.body.appendChild(iframe)
+          
+          // Write HTML to iframe
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document
+          iframeDoc.open()
+          iframeDoc.write(html)
+          iframeDoc.close()
+          
+          // Wait for iframe to fully load and render
+          await new Promise((resolve) => {
+            const checkReady = () => {
+              try {
+                const body = iframeDoc.body
+                if (body && body.children.length > 0 && body.offsetHeight > 0) {
+                  resolve()
+                } else {
+                  setTimeout(checkReady, 100)
+                }
+              } catch (e) {
+                setTimeout(resolve, 2000)
+              }
+            }
+            iframe.onload = () => setTimeout(checkReady, 500)
+            setTimeout(checkReady, 500)
+          })
+          
+          // Get the body element from iframe
+          const iframeBody = iframeDoc.body
+          
+          if (!iframeBody) {
+            throw new Error('Could not access iframe body')
+          }
+          
+          // Wait for styles and images to fully load
+          await new Promise(resolve => setTimeout(resolve, 1500))
+          
+          // Configure html2pdf options
+          const opt = {
+            margin: [10, 10, 10, 10],
+            filename: pdfFilename,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { 
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              letterRendering: true,
+              windowWidth: iframeBody.scrollWidth || 800,
+              windowHeight: iframeBody.scrollHeight || 600,
+              allowTaint: true,
+              backgroundColor: '#ffffff'
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          }
+          
+          // Generate and download PDF from iframe body
+          await window.html2pdf().set(opt).from(iframeBody).save()
+          
+          // Clean up iframe
+          setTimeout(() => {
+            if (iframe.parentNode) {
+              document.body.removeChild(iframe)
+            }
+          }, 1000)
+        } catch (error) {
+          console.error('Error converting HTML to PDF:', error)
+          alert('Failed to generate PDF: ' + error.message + '. The HTML file will be downloaded instead.')
+          // Fallback: download as HTML
+          const blob = new Blob([html], { type: 'text/html' })
+          const url = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.setAttribute('download', pdfFilename.replace('.pdf', '.html'))
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          window.URL.revokeObjectURL(url)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error downloading tenant profile PDF:', err)
+    alert('Failed to download PDF. Please try again.')
+  }
 }
 
 // Approve application
@@ -973,9 +1118,15 @@ onUnmounted(() => {
         <div class="modal-container" @click.stop>
           <div class="modal-header">
             <h2 class="modal-title">Tenant Details</h2>
-            <button class="modal-close-btn" @click="closeTenantModal">
-              <XMarkIcon class="close-icon" />
-            </button>
+            <div class="modal-header-actions">
+              <button class="download-pdf-btn" @click="downloadTenantProfilePdf" title="Download PDF">
+                <ArrowDownTrayIcon class="download-icon" />
+                <span>Download PDF</span>
+              </button>
+              <button class="modal-close-btn" @click="closeTenantModal">
+                <XMarkIcon class="close-icon" />
+              </button>
+            </div>
           </div>
 
           <div v-if="isLoadingTenant" class="modal-loading">
@@ -1209,7 +1360,7 @@ onUnmounted(() => {
 /* Statistics Cards */
 .stats-container {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 32px;
 }
@@ -1740,6 +1891,38 @@ onUnmounted(() => {
   top: 0;
   background: white;
   z-index: 10;
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.download-pdf-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #1500FF;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Montserrat', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.download-pdf-btn:hover {
+  background: #1200cc;
+  transform: translateY(-1px);
+}
+
+.download-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .modal-title {
