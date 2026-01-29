@@ -839,11 +839,7 @@ onUnmounted(() => {
               </td>
               <td class="actions-cell">
                 <div class="actions-group">
-                  <button class="action-btn" @click="handleViewTenant(tenant)" title="View Details">
-                    <EyeIcon class="action-icon" />
-                  </button>
-                  <!-- Only show More Options for non-pending applications -->
-                  <template v-if="tenant.status !== 'pending' || tenant.type !== 'application'">
+
                     <div class="dropdown-container">
                       <button 
                         class="action-btn" 
@@ -853,7 +849,6 @@ onUnmounted(() => {
                         <EllipsisVerticalIcon class="action-icon" />
                       </button>
                     </div>
-                  </template>
                 </div>
               </td>
             </tr>
@@ -873,6 +868,15 @@ onUnmounted(() => {
         :style="{ top: dropdownPosition.top + 'px', right: dropdownPosition.right + 'px' }"
         @click.stop
       >
+       <!-- View -->
+      <button class="dropdown-item"
+        @click="handleViewTenant(
+          paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId)
+        )"
+      >
+        <EyeIcon class="dropdown-icon" />
+        <span>View Details</span>
+      </button>
         <button 
           v-if="paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId)?.id && paginatedTenants.find(t => (t.id || `app-${t.application_id}`) === openDropdownId)?.type === 'tenant'"
           class="dropdown-item"
