@@ -40,6 +40,9 @@ Route::get('/api/payments', [App\Http\Controllers\PaymentController::class, 'ind
 Route::post('/api/payments', [App\Http\Controllers\PaymentController::class, 'store']);
 Route::put('/api/payments/{id}', [App\Http\Controllers\PaymentController::class, 'update']);
 Route::delete('/api/payments/{id}', [App\Http\Controllers\PaymentController::class, 'destroy']);
+Route::put('/api/payments/{id}/approve', [App\Http\Controllers\PaymentController::class, 'approve']);
+Route::put('/api/payments/{id}/reject', [App\Http\Controllers\PaymentController::class, 'reject']);
+Route::get('/api/payments/{id}/receipt', [App\Http\Controllers\ReceiptController::class, 'landlordGenerate']);
 
 // API Routes for reports (landlord only)
 Route::get('/api/reports', [App\Http\Controllers\ReportController::class, 'index']);
@@ -57,6 +60,11 @@ Route::get('/api/reports/download-tenant-profile-pdf/{id}', [App\Http\Controller
 Route::get('/api/tenant/rental', [App\Http\Controllers\TenantRentalController::class, 'getRental']);
 Route::get('/api/tenant/utilities', [App\Http\Controllers\TenantUtilitiesController::class, 'index']);
 Route::post('/api/tenant/utilities/{id}/pay', [App\Http\Controllers\TenantUtilitiesController::class, 'pay']);
+Route::get('/api/tenant/payments', [App\Http\Controllers\TenantPaymentsController::class, 'index']);
+Route::get('/api/tenant/notifications', [App\Http\Controllers\TenantNotificationsController::class, 'index']);
+Route::put('/api/tenant/notifications/{id}/read', [App\Http\Controllers\TenantNotificationsController::class, 'markAsRead']);
+Route::put('/api/tenant/notifications/read-all', [App\Http\Controllers\TenantNotificationsController::class, 'markAllAsRead']);
+Route::get('/api/tenant/receipt/{id}', [App\Http\Controllers\ReceiptController::class, 'generate']);
 
 // Catch-all route for Vue.js SPA
 Route::get('/{any}', function () {
