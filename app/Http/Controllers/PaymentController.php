@@ -58,6 +58,12 @@ class PaymentController extends Controller
                 }
             }
 
+            // Format payment proof URL if exists
+            $paymentProofUrl = null;
+            if ($payment->payment_proof) {
+                $paymentProofUrl = '/storage/' . $payment->payment_proof;
+            }
+
             return [
                 'id' => $payment->id,
                 'tenant_id' => $payment->tenant_id,
@@ -75,8 +81,10 @@ class PaymentController extends Controller
                 'payment_date' => $payment->payment_date ? $payment->payment_date->format('Y-m-d') : null,
                 'due_date' => $payment->due_date ? $payment->due_date->format('Y-m-d') : null,
                 'status' => $payment->status,
+                'review_status' => $payment->review_status,
                 'payment_method' => $payment->payment_method,
                 'reference_number' => $payment->reference_number,
+                'payment_proof' => $payment->payment_proof,
                 'notes' => $payment->notes,
                 'created_at' => $payment->created_at ? $payment->created_at->format('Y-m-d H:i:s') : null,
             ];
@@ -123,20 +131,27 @@ class PaymentController extends Controller
         }
 
         $validated = $request->validate([
-            'tenant_id' => 'required|exists:tenants,id',
             'unit_id' => 'required|exists:units,id',
+            'tenant_id' => 'nullable|exists:tenants,id',
             'payment_type' => 'required|in:rent,utility',
             'amount' => 'required|numeric|min:0',
             'water' => 'nullable|numeric|min:0',
             'electricity' => 'nullable|numeric|min:0',
             'internet' => 'nullable|numeric|min:0',
-            'payment_date' => 'required|date',
-            'due_date' => 'required|date|after_or_equal:payment_date',
+            'payment_date' => 'nullable|date',
+            'due_date' => 'required|date',
             'status' => 'required|in:paid,pending,overdue',
             'payment_method' => 'nullable|string|max:255',
             'reference_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
         ]);
+        
+        // Validate due_date is after or equal to payment_date only if payment_date exists
+        if (isset($validated['payment_date']) && $validated['payment_date']) {
+            $request->validate([
+                'due_date' => 'after_or_equal:payment_date',
+            ]);
+        }
 
         // Verify the unit belongs to this landlord
         $unit = Unit::find($validated['unit_id']);
@@ -155,12 +170,23 @@ class PaymentController extends Controller
             ], 403);
         }
 
-        // Verify tenant is assigned to this unit
-        if ($unit->tenant_id !== (int) $validated['tenant_id']) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Tenant is not assigned to this unit',
-            ], 400);
+        // If tenant_id is not provided, get it from the unit
+        if (!isset($validated['tenant_id']) || !$validated['tenant_id']) {
+            if (!$unit->tenant_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unit has no tenant assigned',
+                ], 400);
+            }
+            $validated['tenant_id'] = $unit->tenant_id;
+        } else {
+            // Verify tenant is assigned to this unit if provided
+            if ($unit->tenant_id && $unit->tenant_id !== (int) $validated['tenant_id']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tenant is not assigned to this unit',
+                ], 400);
+            }
         }
 
         $payment = Payment::create($validated);
@@ -210,13 +236,20 @@ class PaymentController extends Controller
             'water' => 'nullable|numeric|min:0',
             'electricity' => 'nullable|numeric|min:0',
             'internet' => 'nullable|numeric|min:0',
-            'payment_date' => 'sometimes|date',
-            'due_date' => 'sometimes|date|after_or_equal:payment_date',
+            'payment_date' => 'nullable|date',
+            'due_date' => 'sometimes|date',
             'status' => 'sometimes|in:paid,pending,overdue',
             'payment_method' => 'nullable|string|max:255',
             'reference_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
         ]);
+        
+        // Validate due_date is after or equal to payment_date only if payment_date exists
+        if (isset($validated['payment_date']) && $validated['payment_date'] && isset($validated['due_date'])) {
+            $request->validate([
+                'due_date' => 'after_or_equal:payment_date',
+            ]);
+        }
 
         $payment->update($validated);
 
