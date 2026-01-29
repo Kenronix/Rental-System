@@ -1,13 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import TenantSidebar from '../components/layout/TenantSidebar.vue'
-import { 
-  ArrowDownTrayIcon
-} from '@heroicons/vue/24/outline'
 import api from '../services/api.js'
 
 const currentBalance = ref(0.00)
-const paymentMethod = ref(null)
+const nextDueDate = ref(null)
 const paymentHistory = ref([])
 const isLoading = ref(false)
 const error = ref(null)
@@ -18,51 +15,19 @@ const fetchPayments = async () => {
   error.value = null
   
   try {
-    // TODO: Replace with actual API endpoint
-    // const response = await api.get('/tenant/payments')
-    // For now, using mock data based on the image
-    setTimeout(() => {
-      currentBalance.value = 0.00
-      
-      paymentMethod.value = {
-        id: 1,
-        type: 'VISA',
-        last4: '4242',
-        isDefault: true
-      }
-      
-      paymentHistory.value = [
-        {
-          id: 1,
-          date: '2023-10-01',
-          description: 'Rent Payment - October',
-          amount: 1200.00,
-          status: 'paid',
-          receiptUrl: '#'
-        },
-        {
-          id: 2,
-          date: '2023-10-02',
-          description: 'Rent Payment - October',
-          amount: 1200.00,
-          status: 'paid',
-          receiptUrl: '#'
-        },
-        {
-          id: 3,
-          date: '2023-10-03',
-          description: 'Rent Payment - October',
-          amount: 1200.00,
-          status: 'paid',
-          receiptUrl: '#'
-        }
-      ]
-      
-      isLoading.value = false
-    }, 500)
+    const response = await api.get('/tenant/payments')
+    
+    if (response.data.success) {
+      currentBalance.value = response.data.current_balance || 0.00
+      nextDueDate.value = response.data.next_due_date || null
+      paymentHistory.value = response.data.payment_history || []
+    } else {
+      error.value = response.data.message || 'Failed to load payment information. Please try again.'
+    }
   } catch (err) {
     console.error('Error fetching payments:', err)
-    error.value = 'Failed to load payment information. Please try again.'
+    error.value = err.response?.data?.message || 'Failed to load payment information. Please try again.'
+  } finally {
     isLoading.value = false
   }
 }
@@ -79,16 +44,41 @@ const formatDate = (dateString) => {
   return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
 }
 
-const handleManageMethods = () => {
-  // TODO: Navigate to payment methods management page
-  console.log('Manage payment methods')
-}
-
-const handleDownloadReceipt = (receiptUrl, paymentId) => {
-  // TODO: Implement receipt download
-  console.log('Download receipt for payment:', paymentId)
-  // For now, just show an alert
-  alert('Receipt download functionality will be implemented soon.')
+const handleDownloadReceipt = async (receiptUrl, paymentId) => {
+  // Check if payment is approved/paid
+  const payment = paymentHistory.value.find(p => p.id === paymentId)
+  
+  if (payment && payment.status === 'paid') {
+    try {
+      // Generate PDF receipt
+      const response = await api.get(`/tenant/receipt/${paymentId}`, {
+        responseType: 'blob'
+      })
+      
+      // Create blob URL and download
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Receipt-${paymentId}-${new Date().toISOString().split('T')[0]}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error generating receipt:', err)
+      if (err.response?.status === 400) {
+        alert(err.response.data?.message || 'Receipt can only be generated for approved payments.')
+      } else {
+        alert('Failed to generate receipt. Please try again.')
+      }
+    }
+  } else if (receiptUrl && receiptUrl !== '#') {
+    // Fallback: Open payment proof if available
+    window.open(receiptUrl, '_blank')
+  } else {
+    alert('Receipt not available for this payment. Payment must be approved first.')
+  }
 }
 
 onMounted(() => {
@@ -116,26 +106,15 @@ onMounted(() => {
 
       <!-- Payment Content -->
       <div v-else class="payment-content">
-        <!-- Top Cards Section -->
-        <div class="cards-section">
-          <!-- Current Balance Card -->
-          <div class="balance-card">
-            <h3 class="card-title">Current Balance</h3>
-            <p class="balance-amount">{{ formatCurrency(currentBalance) }}</p>
-            <button class="no-payment-button">No Payment Due</button>
+        <!-- Current Balance Card -->
+        <div class="balance-card">
+          <h3 class="card-title">Current Balance</h3>
+          <p class="balance-amount">{{ formatCurrency(currentBalance) }}</p>
+          <div v-if="currentBalance === 0" class="no-payment-text">No Payment Due</div>
+          <div v-else-if="nextDueDate" class="due-date-text">
+            Due Date: {{ formatDate(nextDueDate) }}
           </div>
-
-          <!-- Payment Method Card -->
-          <div class="payment-method-card">
-            <h3 class="card-title">Payment Method</h3>
-            <div class="payment-method-info">
-              <span class="card-number">{{ paymentMethod ? `${paymentMethod.type} **** ${paymentMethod.last4}` : 'No payment method' }}</span>
-              <span v-if="paymentMethod?.isDefault" class="default-badge">Default</span>
-            </div>
-            <button class="manage-methods-button" @click="handleManageMethods">
-              Manage Methods
-            </button>
-          </div>
+          <div v-else class="due-date-text">Payment Due</div>
         </div>
 
         <!-- Payment History Section -->
@@ -159,15 +138,19 @@ onMounted(() => {
                   <td>{{ payment.description }}</td>
                   <td class="amount-cell">{{ formatCurrency(payment.amount) }}</td>
                   <td>
-                    <span class="status-badge status-paid">{{ payment.status === 'paid' ? 'Paid' : payment.status }}</span>
+                    <span :class="['status-badge', payment.status === 'paid' ? 'status-paid' : 'status-pending']">
+                      {{ payment.status === 'paid' ? 'Paid' : (payment.status === 'pending' ? 'Pending' : 'Unpaid') }}
+                    </span>
                   </td>
                   <td>
                     <button 
+                      v-if="payment.status === 'paid'"
                       class="download-link"
-                      @click="handleDownloadReceipt(payment.receiptUrl, payment.id)"
+                      @click="handleDownloadReceipt(payment.payment_proof, payment.id)"
                     >
-                      Download
+                      Download Receipt
                     </button>
+                    <span v-else class="no-receipt">N/A</span>
                   </td>
                 </tr>
               </tbody>
@@ -233,19 +216,14 @@ onMounted(() => {
   background: #1200e6;
 }
 
-/* Cards Section */
-.cards-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 40px;
-}
-
+/* Balance Card */
 .balance-card {
   background: #1500FF;
   border-radius: 12px;
   padding: 24px;
   color: white;
+  margin-bottom: 40px;
+  max-width: 500px;
 }
 
 .card-title {
@@ -262,67 +240,26 @@ onMounted(() => {
   color: white;
 }
 
-.no-payment-button {
+.no-payment-text {
   padding: 12px 24px;
-  background: white;
-  color: #1500FF;
-  border: none;
-  border-radius: 8px;
-  font-family: 'Montserrat', sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.no-payment-button:hover {
-  background: #f0f0f0;
-}
-
-.payment-method-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.payment-method-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.card-number {
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.default-badge {
-  padding: 4px 12px;
-  background: #f3f4f6;
-  color: #374151;
-  border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.manage-methods-button {
-  padding: 10px 20px;
-  background: #6b7280;
+  background: rgba(255, 255, 255, 0.2);
   color: white;
-  border: none;
   border-radius: 8px;
   font-family: 'Montserrat', sans-serif;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  text-align: center;
 }
 
-.manage-methods-button:hover {
-  background: #4b5563;
+.due-date-text {
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 8px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* Payment History Section */
@@ -390,6 +327,16 @@ onMounted(() => {
   color: #15803d;
 }
 
+.status-pending {
+  background: #fed7aa;
+  color: #c2410c;
+}
+
+.no-receipt {
+  color: #6b7280;
+  font-size: 14px;
+}
+
 .download-link {
   background: none;
   border: none;
@@ -415,12 +362,6 @@ onMounted(() => {
 }
 
 /* Responsive Design */
-@media (max-width: 1024px) {
-  .cards-section {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 768px) {
   .main-content {
     margin-left: 0;
