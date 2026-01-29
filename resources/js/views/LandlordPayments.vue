@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, watch, onMounted, onActivated } from 'vue'
+import { ref, computed, watch, onMounted, onActivated, onUnmounted } from 'vue'
+import { Teleport } from 'vue'
 import Sidebar from '../components/layout/Sidebar.vue'
 import { 
   MagnifyingGlassIcon,
@@ -8,7 +9,10 @@ import {
   XMarkIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  EllipsisVerticalIcon,
+  ShareIcon,
+  EyeIcon
 } from '@heroicons/vue/24/outline'
 import { PlusIcon } from '@heroicons/vue/24/solid'
 import api from '../services/api.js'
@@ -16,6 +20,8 @@ import api from '../services/api.js'
 const payments = ref([])
 const allPayments = ref([])
 const tenants = ref([])
+const properties = ref([])
+const units = ref([])
 const statistics = ref({
   total_payments: 0,
   total_amount: 0,
@@ -30,19 +36,24 @@ const isLoading = ref(false)
 const error = ref(null)
 const showPaymentModal = ref(false)
 const showDeleteModal = ref(false)
+const showDetailsModal = ref(false)
 const selectedPayment = ref(null)
 const isSubmitting = ref(false)
 const formErrors = ref({})
+const openDropdownId = ref(null)
+const dropdownPosition = ref({ top: 0, right: 0 })
 
 const searchQuery = ref('')
 const statusFilter = ref('All')
+const paymentTypeFilter = ref('All')
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 
 // Form data
 const formData = ref({
-  tenant_id: '',
+  property_id: '',
   unit_id: '',
+  tenant_id: '',
   payment_type: 'rent',
   amount: '',
   water: '',
@@ -83,6 +94,9 @@ const fetchPayments = async () => {
       // Fetch tenants for dropdown
       await fetchTenants()
       
+      // Fetch properties for dropdown
+      await fetchProperties()
+      
       currentPage.value = 1
     }
   } catch (err) {
@@ -106,6 +120,39 @@ const fetchTenants = async () => {
   }
 }
 
+// Fetch properties for dropdown
+const fetchProperties = async () => {
+  try {
+    const response = await api.get('/properties')
+    if (response.data.success) {
+      properties.value = response.data.properties || []
+    }
+  } catch (err) {
+    console.error('Error fetching properties:', err)
+  }
+}
+
+// Fetch units for selected property
+const fetchUnits = async (propertyId) => {
+  if (!propertyId) {
+    units.value = []
+    return
+  }
+  
+  try {
+    const response = await api.get(`/properties/${propertyId}/units`)
+    if (response.data.success) {
+      units.value = (response.data.units || []).map(unit => ({
+        ...unit,
+        tenant_name: unit.tenant ? unit.tenant.name : null
+      }))
+    }
+  } catch (err) {
+    console.error('Error fetching units:', err)
+    units.value = []
+  }
+}
+
 // Get units for selected tenant
 const getUnitsForTenant = computed(() => {
   if (!formData.value.tenant_id) return []
@@ -117,6 +164,14 @@ const getUnitsForTenant = computed(() => {
 // Filter payments
 const filteredPayments = computed(() => {
   let filtered = allPayments.value
+  
+  // Filter by payment type
+  if (paymentTypeFilter.value !== 'All') {
+    filtered = filtered.filter((payment) => {
+      const paymentType = payment.payment_type || 'rent'
+      return paymentType === paymentTypeFilter.value
+    })
+  }
   
   // Filter by search query
   const q = searchQuery.value.trim().toLowerCase()
@@ -132,10 +187,34 @@ const filteredPayments = computed(() => {
   
   // Filter by status
   if (statusFilter.value !== 'All') {
-    filtered = filtered.filter((payment) => payment.status === statusFilter.value)
+    if (statusFilter.value === 'pending_review') {
+      filtered = filtered.filter((payment) => payment.review_status === 'pending_review')
+    } else {
+      filtered = filtered.filter((payment) => payment.status === statusFilter.value)
+    }
   }
   
   return filtered
+})
+
+// Computed statistics based on filtered payments
+const computedStatistics = computed(() => {
+  const filtered = filteredPayments.value
+  
+  const totalPayments = filtered.length
+  const paidPayments = filtered.filter(p => p.status === 'paid')
+  const pendingPayments = filtered.filter(p => p.status === 'pending')
+  const overduePayments = filtered.filter(p => p.status === 'overdue')
+  
+  return {
+    total_payments: totalPayments,
+    paid_amount: paidPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0),
+    pending_amount: pendingPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0),
+    overdue_amount: overduePayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0),
+    paid_count: paidPayments.length,
+    pending_count: pendingPayments.length,
+    overdue_count: overduePayments.length
+  }
 })
 
 // Pagination
@@ -153,6 +232,31 @@ const resetToFirstPage = () => {
   currentPage.value = 1
 }
 
+const goToPreviousPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+  }
+}
+
+const goToNextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+  }
+}
+
+const goToPage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+const paginationInfo = computed(() => {
+  const total = filteredPayments.value.length
+  const start = (currentPage.value - 1) * itemsPerPage.value + 1
+  const end = Math.min(currentPage.value * itemsPerPage.value, total)
+  return { start, end, total }
+})
+
 // Format currency
 const formatCurrency = (amount) => {
   if (!amount) return '₱0.00'
@@ -165,14 +269,19 @@ const formatCurrency = (amount) => {
 
 // Format date
 const formatDate = (dateString) => {
-  if (!dateString) return 'N/A'
+  if (!dateString) return 'No date'
   const date = new Date(dateString)
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 // Get status class
-const getStatusClass = (status) => {
-  switch (status) {
+const getStatusClass = (payment) => {
+  // Check if payment needs review
+  if (payment.review_status === 'pending_review') {
+    return 'status-review'
+  }
+  
+  switch (payment.status) {
     case 'paid':
       return 'status-paid'
     case 'pending':
@@ -184,32 +293,51 @@ const getStatusClass = (status) => {
   }
 }
 
+// Get status display text
+const getStatusText = (payment) => {
+  // Check if payment needs review
+  if (payment.review_status === 'pending_review') {
+    return 'To Be Reviewed'
+  }
+  
+  return payment.status.charAt(0).toUpperCase() + payment.status.slice(1)
+}
+
 // Open add payment modal
 const openAddPaymentModal = () => {
   selectedPayment.value = null
   formData.value = {
-    tenant_id: '',
+    property_id: '',
     unit_id: '',
+    tenant_id: '',
     payment_type: 'rent',
     amount: '',
     water: '',
     electricity: '',
     internet: '',
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: '',
     due_date: '',
     status: 'pending',
     payment_method: '',
     reference_number: '',
     notes: ''
   }
+  units.value = []
   formErrors.value = {}
   showPaymentModal.value = true
 }
 
 // Open edit payment modal
-const openEditPaymentModal = (payment) => {
+const openEditPaymentModal = async (payment) => {
   selectedPayment.value = payment
+  
+  // Fetch units for the property if we have property_id
+  if (payment.property_id) {
+    await fetchUnits(payment.property_id)
+  }
+  
   formData.value = {
+    property_id: payment.property_id ? payment.property_id.toString() : '',
     tenant_id: payment.tenant_id.toString(),
     unit_id: payment.unit_id.toString(),
     payment_type: payment.payment_type || 'rent',
@@ -233,8 +361,9 @@ const closePaymentModal = () => {
   showPaymentModal.value = false
   selectedPayment.value = null
   formData.value = {
-    tenant_id: '',
+    property_id: '',
     unit_id: '',
+    tenant_id: '',
     payment_type: 'rent',
     amount: '',
     water: '',
@@ -247,15 +376,73 @@ const closePaymentModal = () => {
     reference_number: '',
     notes: ''
   }
+  units.value = []
   formErrors.value = {}
 }
 
-// Handle tenant selection
-const handleTenantChange = () => {
-  const tenant = tenants.value.find(t => t.id === parseInt(formData.value.tenant_id))
-  if (tenant) {
-    formData.value.unit_id = tenant.unit_id.toString()
+// Handle property selection
+const handlePropertyChange = async () => {
+  formData.value.unit_id = ''
+  formData.value.tenant_id = ''
+  formData.value.amount = ''
+  
+  if (formData.value.property_id) {
+    await fetchUnits(parseInt(formData.value.property_id))
+  } else {
+    units.value = []
   }
+}
+
+// Handle unit selection
+const handleUnitChange = () => {
+  if (formData.value.unit_id) {
+    const unit = units.value.find(u => u.id === parseInt(formData.value.unit_id))
+    
+    if (unit) {
+      // Auto-fill tenant if unit has a tenant
+      if (unit.tenant_id) {
+        formData.value.tenant_id = unit.tenant_id.toString()
+      } else {
+        formData.value.tenant_id = ''
+      }
+      
+      // Auto-fill amount based on payment type
+      if (formData.value.payment_type === 'rent' && unit.monthly_rent) {
+        formData.value.amount = unit.monthly_rent.toString()
+      } else if (formData.value.payment_type === 'utility') {
+        formData.value.amount = ''
+      }
+    }
+  } else {
+    formData.value.tenant_id = ''
+    formData.value.amount = ''
+  }
+}
+
+// Get tenant name for display
+const getTenantName = () => {
+  if (!formData.value.unit_id) {
+    return ''
+  }
+  
+  const unit = units.value.find(u => u.id === parseInt(formData.value.unit_id))
+  if (unit) {
+    if (unit.tenant && unit.tenant.name) {
+      return unit.tenant.name
+    }
+    if (unit.tenant_name) {
+      return unit.tenant_name
+    }
+    if (formData.value.tenant_id) {
+      const tenant = tenants.value.find(t => t.id === parseInt(formData.value.tenant_id))
+      if (tenant) {
+        return tenant.name
+      }
+    }
+    return 'No tenant assigned to this unit'
+  }
+  
+  return ''
 }
 
 // Auto-calculate total amount for utilities
@@ -275,17 +462,33 @@ const calculateUtilityTotal = () => {
 watch([() => formData.value.water, () => formData.value.electricity, () => formData.value.internet, () => formData.value.payment_type], () => {
   if (formData.value.payment_type === 'utility') {
     calculateUtilityTotal()
+  } else {
+    // Clear utility fields when switching to rent
+    formData.value.water = ''
+    formData.value.electricity = ''
+    formData.value.internet = ''
   }
 })
 
+// Watch payment_type to handle amount field
+watch(() => formData.value.payment_type, (newType) => {
+  if (newType === 'utility') {
+    // Clear amount for utility (will be calculated from breakdown)
+    formData.value.amount = ''
+  } else if (newType === 'rent' && formData.value.unit_id) {
+    // Re-fill amount from unit if switching back to rent
+    handleUnitChange()
+  }
+})
+
+
 // Submit payment
 const submitPayment = async () => {
-  formErrors.value = {}
+  formErrors.value = {} 
   isSubmitting.value = true
   
   try {
     const payload = {
-      tenant_id: parseInt(formData.value.tenant_id),
       unit_id: parseInt(formData.value.unit_id),
       payment_type: formData.value.payment_type,
       amount: parseFloat(formData.value.amount),
@@ -298,6 +501,11 @@ const submitPayment = async () => {
       payment_method: formData.value.payment_method || null,
       reference_number: formData.value.reference_number || null,
       notes: formData.value.notes || null
+    }
+    
+    // Add tenant_id if provided
+    if (formData.value.tenant_id) {
+      payload.tenant_id = parseInt(formData.value.tenant_id)
     }
     
     let response
@@ -339,6 +547,18 @@ const closeDeleteModal = () => {
   selectedPayment.value = null
 }
 
+// Open details modal
+const openDetailsModal = (payment) => {
+  selectedPayment.value = payment
+  showDetailsModal.value = true
+}
+
+// Close details modal
+const closeDetailsModal = () => {
+  showDetailsModal.value = false
+  selectedPayment.value = null
+}
+
 // Delete payment
 const deletePayment = async () => {
   if (!selectedPayment.value) return
@@ -360,12 +580,72 @@ const deletePayment = async () => {
   }
 }
 
+// Handle dropdown menu
+const toggleDropdown = (event, paymentId) => {
+  event.stopPropagation()
+  
+  if (openDropdownId.value === paymentId) {
+    openDropdownId.value = null
+  } else {
+    const rect = event.target.closest('button').getBoundingClientRect()
+    dropdownPosition.value = {
+      top: rect.bottom + window.scrollY + 4,
+      right: window.innerWidth - rect.right + window.scrollX
+    }
+    openDropdownId.value = paymentId
+  }
+}
+
+const closeDropdown = () => {
+  openDropdownId.value = null
+}
+
+// Share payment
+const sharePayment = async (payment) => {
+  try {
+    // Create shareable link or copy to clipboard
+    const paymentUrl = `${window.location.origin}/payments/${payment.id}`
+    
+    if (navigator.share) {
+      await navigator.share({
+        title: `Payment - ${payment.tenant_name}`,
+        text: `Payment details for ${payment.tenant_name}`,
+        url: paymentUrl
+      })
+    } else {
+      // Fallback: copy to clipboard
+      await navigator.clipboard.writeText(paymentUrl)
+      alert('Payment link copied to clipboard!')
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      console.error('Error sharing payment:', err)
+      // Fallback: copy to clipboard
+      try {
+        const paymentUrl = `${window.location.origin}/payments/${payment.id}`
+        await navigator.clipboard.writeText(paymentUrl)
+        alert('Payment link copied to clipboard!')
+      } catch (clipboardErr) {
+        alert('Failed to share payment. Please try again.')
+      }
+    }
+  }
+  closeDropdown()
+}
+
 onMounted(() => {
   fetchPayments()
+  // Close dropdown when clicking outside
+  document.addEventListener('click', closeDropdown)
 })
 
 onActivated(() => {
   fetchPayments()
+})
+
+onUnmounted(() => {
+  closeDropdown()
+  document.removeEventListener('click', closeDropdown)
 })
 </script>
 
@@ -381,23 +661,19 @@ onActivated(() => {
       <!-- Statistics Cards -->
       <div class="stats-container">
         <div class="stat-card">
-          <div class="stat-value">{{ statistics.total_payments }}</div>
+          <div class="stat-value">{{ computedStatistics.total_payments }}</div>
           <div class="stat-label">Total Payments</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">{{ formatCurrency(statistics.total_amount) }}</div>
-          <div class="stat-label">Total Amount</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">{{ formatCurrency(statistics.paid_amount) }}</div>
+          <div class="stat-value">{{ formatCurrency(computedStatistics.paid_amount) }}</div>
           <div class="stat-label">Paid Amount</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">{{ formatCurrency(statistics.pending_amount) }}</div>
+          <div class="stat-value">{{ formatCurrency(computedStatistics.pending_amount) }}</div>
           <div class="stat-label">Pending Amount</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">{{ formatCurrency(statistics.overdue_amount) }}</div>
+          <div class="stat-value">{{ formatCurrency(computedStatistics.overdue_amount) }}</div>
           <div class="stat-label">Overdue Amount</div>
         </div>
       </div>
@@ -416,10 +692,19 @@ onActivated(() => {
         </div>
         <div class="filters-group">
           <div class="filter-container">
+            <select v-model="paymentTypeFilter" class="filter-dropdown" @change="resetToFirstPage">
+              <option value="All">All Types</option>
+              <option value="rent">Rent</option>
+              <option value="utility">Utility</option>
+            </select>
+            <ChevronDownIcon class="chevron-icon" />
+          </div>
+          <div class="filter-container">
             <select v-model="statusFilter" class="filter-dropdown" @change="resetToFirstPage">
               <option value="All">All Status</option>
               <option value="paid">Paid</option>
               <option value="pending">Pending</option>
+              <option value="pending_review">To Be Reviewed</option>
               <option value="overdue">Overdue</option>
             </select>
             <ChevronDownIcon class="chevron-icon" />
@@ -470,7 +755,7 @@ onActivated(() => {
               <td>
                 <div class="tenant-info">
                   <div class="tenant-name">{{ payment.tenant_name }}</div>
-                  <div class="tenant-email">{{ payment.tenant_email }}</div>
+                  <div class="tenant-email">{{ payment.tenant_email || 'N/A' }}</div>
                 </div>
               </td>
               <td>
@@ -500,37 +785,74 @@ onActivated(() => {
               <td>{{ payment.reference_number || 'N/A' }}</td>
               <td>
                 <div class="actions-cell">
-                  <button class="action-btn edit-btn" @click="openEditPaymentModal(payment)" title="Edit">
-                    <PencilIcon class="action-icon" />
+                  <button 
+                    class="action-btn dots-btn" 
+                    @click="toggleDropdown($event, payment.id)"
+                    title="More options"
+                  >
+                    <EllipsisVerticalIcon class="action-icon" />
                   </button>
-                  <button class="action-btn delete-btn" @click="openDeleteModal(payment)" title="Delete">
-                    <TrashIcon class="action-icon" />
-                  </button>
+                  
+                  <Teleport to="body">
+                    <div 
+                      v-if="openDropdownId === payment.id"
+                      class="dropdown-menu"
+                      :style="{ top: dropdownPosition.top + 'px', right: dropdownPosition.right + 'px' }"
+                      @click.stop
+                    >
+                      <button class="dropdown-item" @click="openDetailsModal(payment); closeDropdown()">
+                        <EyeIcon class="dropdown-icon" />
+                        <span>View Details</span>
+                      </button>
+                      <button class="dropdown-item" @click="openEditPaymentModal(payment); closeDropdown()">
+                        <PencilIcon class="dropdown-icon" />
+                        <span>Edit</span>
+                      </button>
+                      <button class="dropdown-item" @click="sharePayment(payment)">
+                        <ShareIcon class="dropdown-icon" />
+                        <span>Share</span>
+                      </button>
+                      <button class="dropdown-item delete-item" @click="openDeleteModal(payment); closeDropdown()">
+                        <TrashIcon class="dropdown-icon" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </Teleport>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
 
-        <!-- Pagination -->
-        <div v-if="totalPages > 1" class="pagination">
+      <!-- Pagination -->
+      <div v-if="!isLoading && !error && filteredPayments.length > 0" class="pagination-container">
+        <div class="pagination">
           <button 
             class="pagination-btn" 
-            :disabled="currentPage === 1" 
-            @click="currentPage--"
+            :disabled="currentPage === 1"
+            @click="goToPreviousPage"
           >
-            <ChevronLeftIcon class="pagination-icon" />
+            <ChevronLeftIcon class="chevron-pagination-icon" />
           </button>
-          <span class="pagination-info">
-            Page {{ currentPage }} of {{ totalPages }}
-          </span>
+          <button 
+            v-for="page in totalPages" 
+            :key="page"
+            :class="['page-number', { active: currentPage === page }]"
+            @click="goToPage(page)"
+          >
+            {{ page }}
+          </button>
           <button 
             class="pagination-btn" 
-            :disabled="currentPage === totalPages" 
-            @click="currentPage++"
+            :disabled="currentPage === totalPages"
+            @click="goToNextPage"
           >
-            <ChevronRightIcon class="pagination-icon" />
+            <ChevronRightIcon class="chevron-pagination-icon" />
           </button>
+        </div>
+        <div class="pagination-info">
+          Showing {{ paginationInfo.start }} to {{ paginationInfo.end }} of {{ paginationInfo.total }} results
         </div>
       </div>
 
@@ -546,35 +868,49 @@ onActivated(() => {
           
           <form @submit.prevent="submitPayment" class="payment-form">
             <div class="form-group">
-              <label>Tenant <span class="required">*</span></label>
+              <label>Property <span class="required">*</span></label>
               <select 
-                v-model="formData.tenant_id" 
-                @change="handleTenantChange"
-                :class="{ 'error': formErrors.tenant_id }"
+                v-model="formData.property_id" 
+                @change="handlePropertyChange"
+                :class="{ 'error': formErrors.property_id }"
                 required
               >
-                <option value="">Select Tenant</option>
-                <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
-                  {{ tenant.name }} - {{ tenant.property_name }} Unit {{ tenant.unit_number }}
+                <option value="">Select Property</option>
+                <option v-for="property in properties" :key="property.id" :value="property.id">
+                  {{ property.name }}
                 </option>
               </select>
-              <span v-if="formErrors.tenant_id" class="error-message">{{ formErrors.tenant_id[0] }}</span>
+              <span v-if="formErrors.property_id" class="error-message">{{ formErrors.property_id[0] }}</span>
             </div>
 
             <div class="form-group">
               <label>Unit <span class="required">*</span></label>
               <select 
                 v-model="formData.unit_id" 
+                @change="handleUnitChange"
                 :class="{ 'error': formErrors.unit_id }"
                 required
-                :disabled="!formData.tenant_id"
+                :disabled="!formData.property_id"
               >
                 <option value="">Select Unit</option>
-                <option v-for="unit in getUnitsForTenant" :key="unit.id" :value="unit.id">
-                  {{ unit.property_name }} - Unit {{ unit.unit_number }}
+                <option v-for="unit in units" :key="unit.id" :value="unit.id">
+                  Unit {{ unit.unit_number }}
                 </option>
               </select>
               <span v-if="formErrors.unit_id" class="error-message">{{ formErrors.unit_id[0] }}</span>
+            </div>
+
+            <div class="form-group">
+              <label>Tenant <span class="required">*</span></label>
+              <input 
+                type="text" 
+                :value="getTenantName()"
+                :class="{ 'error': formErrors.tenant_id }"
+                readonly
+                disabled
+                style="background-color: #f3f4f6; cursor: not-allowed;"
+              />
+              <span v-if="formErrors.tenant_id" class="error-message">{{ formErrors.tenant_id[0] }}</span>
             </div>
 
             <div class="form-group">
@@ -633,7 +969,7 @@ onActivated(() => {
             </div>
 
             <div class="form-row">
-              <div v-if="formData.payment_type === 'rent'" class="form-group">
+              <div class="form-group">
                 <label>Amount <span class="required">*</span></label>
                 <input 
                   type="number" 
@@ -641,23 +977,12 @@ onActivated(() => {
                   step="0.01"
                   min="0"
                   :class="{ 'error': formErrors.amount }"
+                  :readonly="formData.payment_type === 'rent' && formData.unit_id"
+                  :disabled="formData.payment_type === 'rent' && formData.unit_id"
+                  :style="formData.payment_type === 'rent' && formData.unit_id ? 'background-color: #f3f4f6; cursor: not-allowed;' : ''"
                   required
                 />
-                <span v-if="formErrors.amount" class="error-message">{{ formErrors.amount[0] }}</span>
-              </div>
-
-              <div v-if="formData.payment_type === 'utility'" class="form-group">
-                <label>Total Amount <span class="required">*</span></label>
-                <input 
-                  type="number" 
-                  v-model="formData.amount" 
-                  step="0.01"
-                  min="0"
-                  :class="{ 'error': formErrors.amount }"
-                  readonly
-                  style="background-color: #f3f4f6; cursor: not-allowed;"
-                />
-                <span class="helper-text">Auto-calculated from utility breakdown</span>
+                <span v-if="formData.payment_type === 'utility'" class="helper-text">Auto-calculated from utility breakdown</span>
                 <span v-if="formErrors.amount" class="error-message">{{ formErrors.amount[0] }}</span>
               </div>
 
@@ -673,12 +998,11 @@ onActivated(() => {
 
             <div class="form-row">
               <div class="form-group">
-                <label>Payment Date <span class="required">*</span></label>
+                <label>Payment Date</label>
                 <input 
                   type="date" 
                   v-model="formData.payment_date" 
                   :class="{ 'error': formErrors.payment_date }"
-                  required
                 />
                 <span v-if="formErrors.payment_date" class="error-message">{{ formErrors.payment_date[0] }}</span>
               </div>
@@ -688,7 +1012,7 @@ onActivated(() => {
                 <input 
                   type="date" 
                   v-model="formData.due_date" 
-                  :min="formData.payment_date"
+                  :min="formData.payment_date || ''"
                   :class="{ 'error': formErrors.due_date }"
                   required
                 />
@@ -735,6 +1059,125 @@ onActivated(() => {
               </button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- View Details Modal -->
+      <div v-if="showDetailsModal" class="modal-overlay" @click.self="closeDetailsModal">
+        <div class="modal-content details-modal">
+          <div class="modal-header">
+            <h2>Payment Details</h2>
+            <button class="close-btn" @click="closeDetailsModal">
+              <XMarkIcon class="close-icon" />
+            </button>
+          </div>
+          
+          <div v-if="selectedPayment" class="details-content">
+            <div class="details-section">
+              <h3 class="details-section-title">Tenant Information</h3>
+              <div class="details-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Name:</span>
+                  <span class="detail-value">{{ selectedPayment.tenant_name }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Email:</span>
+                  <span class="detail-value">{{ selectedPayment.tenant_email || 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="details-section">
+              <h3 class="details-section-title">Property Information</h3>
+              <div class="details-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Property:</span>
+                  <span class="detail-value">{{ selectedPayment.property_name }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Unit:</span>
+                  <span class="detail-value">Unit {{ selectedPayment.unit_number }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="details-section">
+              <h3 class="details-section-title">Payment Information</h3>
+              <div class="details-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Payment Type:</span>
+                  <span class="detail-value">
+                    {{ selectedPayment.payment_type === 'rent' ? 'Rent' : 'Utility' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Amount:</span>
+                  <span class="detail-value amount-highlight">{{ formatCurrency(selectedPayment.amount) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Status:</span>
+                  <span class="detail-value">
+                    {{ getStatusText(selectedPayment) }}
+                  </span>
+                </div>
+                <div v-if="selectedPayment.review_status" class="detail-item">
+                  <span class="detail-label">Review Status:</span>
+                  <span class="detail-value">
+                    {{ selectedPayment.review_status === 'pending_review' ? 'Pending Review' : 
+                        selectedPayment.review_status === 'approved' ? 'Approved' : 
+                        selectedPayment.review_status === 'rejected' ? 'Rejected' : 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Payment Date:</span>
+                  <span class="detail-value">{{ formatDate(selectedPayment.payment_date) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Due Date:</span>
+                  <span class="detail-value">{{ formatDate(selectedPayment.due_date) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Payment Method:</span>
+                  <span class="detail-value">{{ selectedPayment.payment_method || 'N/A' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Reference Number:</span>
+                  <span class="detail-value">{{ selectedPayment.reference_number || 'N/A' }}</span>
+                </div>
+                <div v-if="selectedPayment.payment_proof" class="detail-item full-width">
+                  <span class="detail-label">Payment Proof:</span>
+                  <div class="payment-proof-container">
+                    <img :src="`/storage/${selectedPayment.payment_proof}`" alt="Payment proof" class="payment-proof-image" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="selectedPayment.payment_type === 'utility'" class="details-section">
+              <h3 class="details-section-title">Utility Breakdown</h3>
+              <div class="details-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Water:</span>
+                  <span class="detail-value">{{ selectedPayment.water ? formatCurrency(selectedPayment.water) : 'N/A' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Electricity:</span>
+                  <span class="detail-value">{{ selectedPayment.electricity ? formatCurrency(selectedPayment.electricity) : 'N/A' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Internet:</span>
+                  <span class="detail-value">{{ selectedPayment.internet ? formatCurrency(selectedPayment.internet) : 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="selectedPayment.notes" class="details-section">
+              <h3 class="details-section-title">Notes</h3>
+              <div class="detail-item">
+                <span class="detail-value notes-text">{{ selectedPayment.notes }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -843,7 +1286,7 @@ onActivated(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1500FF;
+  color: #111827;
   margin-bottom: 8px;
 }
 
@@ -883,6 +1326,7 @@ onActivated(() => {
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 16px;
+  font-family: 'Montserrat', sans-serif;
   background: white;
 }
 
@@ -1010,7 +1454,9 @@ onActivated(() => {
 .tenant-email {
   font-size: 12px;
   color: #666;
+  margin-top: 4px;
 }
+
 
 .property-info {
   display: flex;
@@ -1036,7 +1482,7 @@ onActivated(() => {
 
 .amount-cell {
   font-weight: 600;
-  color: #1500FF;
+  color: #111827;
 }
 
 .status-badge {
@@ -1063,9 +1509,15 @@ onActivated(() => {
   color: #991b1b;
 }
 
+.status-review {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 .actions-cell {
   display: flex;
   gap: 8px;
+  position: relative;
 }
 
 .action-btn {
@@ -1073,10 +1525,19 @@ onActivated(() => {
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+}
+
+.action-btn:hover {
+  background: #f3f4f6;
+}
+
+.dots-btn {
+  color: #666;
 }
 
 .action-icon {
@@ -1084,48 +1545,85 @@ onActivated(() => {
   height: 18px;
 }
 
-.edit-btn {
+.dropdown-menu {
+  position: fixed;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+  z-index: 1000;
+  padding: 4px;
+  border: 1px solid #e5e7eb;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #374151;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.dropdown-item:hover {
   background: #f3f4f6;
-  color: #1a1a1a;
 }
 
-.edit-btn:hover {
-  background: #e5e7eb;
-}
-
-.delete-btn {
-  background: #fee2e2;
+.dropdown-item.delete-item {
   color: #dc2626;
 }
 
-.delete-btn:hover {
-  background: #fecaca;
+.dropdown-item.delete-item:hover {
+  background: #fee2e2;
+}
+
+.dropdown-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 /* Pagination */
+.pagination-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
 .pagination {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 16px;
-  padding: 24px;
-  border-top: 1px solid #e5e7eb;
+  gap: 8px;
+  background: white;
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .pagination-btn {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
   display: flex;
   align-items: center;
-  transition: all 0.2s ease;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f5f5f5;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .pagination-btn:hover:not(:disabled) {
-  border-color: #1500FF;
-  color: #1500FF;
+  background: #e5e5e5;
 }
 
 .pagination-btn:disabled {
@@ -1133,12 +1631,41 @@ onActivated(() => {
   cursor: not-allowed;
 }
 
-.pagination-icon {
+.chevron-pagination-icon {
   width: 20px;
   height: 20px;
+  color: #666;
+}
+
+.page-number {
+  min-width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.page-number:hover {
+  background: #f5f5f5;
+}
+
+.page-number.active {
+  background: #1500FF;
+  color: white;
+  font-weight: 600;
 }
 
 .pagination-info {
+  font-family: 'Montserrat', sans-serif;
   font-size: 14px;
   color: #666;
 }
@@ -1351,6 +1878,96 @@ onActivated(() => {
 .delete-content p {
   margin-bottom: 16px;
   color: #1a1a1a;
+}
+
+.details-modal {
+  max-width: 700px;
+}
+
+.details-content {
+  padding: 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.details-section {
+  margin-bottom: 24px;
+}
+
+.details-section:last-child {
+  margin-bottom: 0;
+}
+
+.details-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.detail-value.amount-highlight {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.detail-value.notes-text {
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.detail-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.payment-proof-container {
+  margin-top: 8px;
+}
+
+.payment-proof-image {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 768px) {
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .payment-details {
