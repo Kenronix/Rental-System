@@ -4,7 +4,6 @@ import { Teleport } from 'vue'
 import Sidebar from '../components/layout/Sidebar.vue'
 import { 
   MagnifyingGlassIcon,
-  PencilIcon,
   TrashIcon,
   XMarkIcon,
   ChevronLeftIcon,
@@ -12,7 +11,8 @@ import {
   ChevronDownIcon,
   EllipsisVerticalIcon,
   ShareIcon,
-  EyeIcon
+  EyeIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/vue/24/outline'
 import { PlusIcon } from '@heroicons/vue/24/solid'
 import api from '../services/api.js'
@@ -188,7 +188,11 @@ const filteredPayments = computed(() => {
   // Filter by status
   if (statusFilter.value !== 'All') {
     if (statusFilter.value === 'pending_review') {
+      // Filter for PENDING (tenant submitted proof)
       filtered = filtered.filter((payment) => payment.review_status === 'pending_review')
+    } else if (statusFilter.value === 'pending') {
+      // Filter for NOT PAID (status = pending but no review_status)
+      filtered = filtered.filter((payment) => payment.status === 'pending' && !payment.review_status)
     } else {
       filtered = filtered.filter((payment) => payment.status === statusFilter.value)
     }
@@ -276,11 +280,22 @@ const formatDate = (dateString) => {
 
 // Get status class
 const getStatusClass = (payment) => {
-  // Check if payment needs review
+  // If payment is approved and paid, show paid style
+  if (payment.review_status === 'approved' && payment.status === 'paid') {
+    return 'status-paid'
+  }
+  
+  // If tenant submitted proof (pending_review), show pending/review style
   if (payment.review_status === 'pending_review') {
     return 'status-review'
   }
   
+  // If payment is created but no proof submitted yet (NOT PAID), show pending style
+  if (payment.status === 'pending' && !payment.review_status) {
+    return 'status-pending'
+  }
+  
+  // Default status classes
   switch (payment.status) {
     case 'paid':
       return 'status-paid'
@@ -295,11 +310,22 @@ const getStatusClass = (payment) => {
 
 // Get status display text
 const getStatusText = (payment) => {
-  // Check if payment needs review
-  if (payment.review_status === 'pending_review') {
-    return 'To Be Reviewed'
+  // If payment is approved and paid, show Paid
+  if (payment.review_status === 'approved' && payment.status === 'paid') {
+    return 'Paid'
   }
   
+  // If tenant submitted proof (pending_review), show Pending
+  if (payment.review_status === 'pending_review') {
+    return 'Pending'
+  }
+  
+  // If payment is created but no proof submitted yet (status = pending, no review_status), show Not Paid
+  if (payment.status === 'pending' && !payment.review_status) {
+    return 'Not Paid'
+  }
+  
+  // Default: show capitalized status
   return payment.status.charAt(0).toUpperCase() + payment.status.slice(1)
 }
 
@@ -327,33 +353,30 @@ const openAddPaymentModal = () => {
   showPaymentModal.value = true
 }
 
-// Open edit payment modal
-const openEditPaymentModal = async (payment) => {
-  selectedPayment.value = payment
-  
-  // Fetch units for the property if we have property_id
-  if (payment.property_id) {
-    await fetchUnits(payment.property_id)
+// Download receipt for a payment (approved/paid only)
+const handleDownloadReceipt = async (payment) => {
+  const isPaid = payment.review_status === 'approved' && payment.status === 'paid'
+  if (!isPaid) {
+    alert('Receipt can only be downloaded for approved payments.')
+    return
   }
-  
-  formData.value = {
-    property_id: payment.property_id ? payment.property_id.toString() : '',
-    tenant_id: payment.tenant_id.toString(),
-    unit_id: payment.unit_id.toString(),
-    payment_type: payment.payment_type || 'rent',
-    amount: payment.amount.toString(),
-    water: payment.water ? payment.water.toString() : '',
-    electricity: payment.electricity ? payment.electricity.toString() : '',
-    internet: payment.internet ? payment.internet.toString() : '',
-    payment_date: payment.payment_date || '',
-    due_date: payment.due_date || '',
-    status: payment.status,
-    payment_method: payment.payment_method || '',
-    reference_number: payment.reference_number || '',
-    notes: payment.notes || ''
+  try {
+    const response = await api.get(`/payments/${payment.id}/receipt`, {
+      responseType: 'blob'
+    })
+    const blob = new Blob([response.data], { type: 'application/pdf' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `Receipt-${payment.id}-${new Date().toISOString().split('T')[0]}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('Error downloading receipt:', err)
+    alert(err.response?.data?.message || 'Failed to download receipt. Please try again.')
   }
-  formErrors.value = {}
-  showPaymentModal.value = true
 }
 
 // Close payment modal
@@ -580,6 +603,62 @@ const deletePayment = async () => {
   }
 }
 
+// Approve payment
+const approvePayment = async () => {
+  if (!selectedPayment.value) return
+  
+  if (!confirm('Are you sure you want to approve this payment?')) {
+    return
+  }
+  
+  isSubmitting.value = true
+  try {
+    const response = await api.put(`/payments/${selectedPayment.value.id}/approve`)
+    if (response.data.success) {
+      await fetchPayments()
+      // Update selectedPayment to reflect the change
+      selectedPayment.value.review_status = 'approved'
+      selectedPayment.value.status = 'paid'
+      alert('Payment approved successfully!')
+    } else {
+      error.value = response.data.message || 'Failed to approve payment.'
+    }
+  } catch (err) {
+    console.error('Error approving payment:', err)
+    error.value = err.response?.data?.message || 'Failed to approve payment. Please try again.'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// Reject payment
+const rejectPayment = async () => {
+  if (!selectedPayment.value) return
+  
+  if (!confirm('Are you sure you want to reject this payment?')) {
+    return
+  }
+  
+  isSubmitting.value = true
+  try {
+    const response = await api.put(`/payments/${selectedPayment.value.id}/reject`)
+    if (response.data.success) {
+      await fetchPayments()
+      // Update selectedPayment to reflect the change
+      selectedPayment.value.review_status = 'rejected'
+      selectedPayment.value.status = 'pending'
+      alert('Payment rejected successfully!')
+    } else {
+      error.value = response.data.message || 'Failed to reject payment.'
+    }
+  } catch (err) {
+    console.error('Error rejecting payment:', err)
+    error.value = err.response?.data?.message || 'Failed to reject payment. Please try again.'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
 // Handle dropdown menu
 const toggleDropdown = (event, paymentId) => {
   event.stopPropagation()
@@ -703,8 +782,8 @@ onUnmounted(() => {
             <select v-model="statusFilter" class="filter-dropdown" @change="resetToFirstPage">
               <option value="All">All Status</option>
               <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="pending_review">To Be Reviewed</option>
+              <option value="pending">Not Paid</option>
+              <option value="pending_review">Pending</option>
               <option value="overdue">Overdue</option>
             </select>
             <ChevronDownIcon class="chevron-icon" />
@@ -777,8 +856,8 @@ onUnmounted(() => {
               <td>{{ formatDate(payment.payment_date) }}</td>
               <td>{{ formatDate(payment.due_date) }}</td>
               <td>
-                <span :class="['status-badge', getStatusClass(payment.status)]">
-                  {{ payment.status.charAt(0).toUpperCase() + payment.status.slice(1) }}
+                <span :class="['status-badge', getStatusClass(payment)]">
+                  {{ getStatusText(payment) }}
                 </span>
               </td>
               <td>{{ payment.payment_method || 'N/A' }}</td>
@@ -804,9 +883,13 @@ onUnmounted(() => {
                         <EyeIcon class="dropdown-icon" />
                         <span>View Details</span>
                       </button>
-                      <button class="dropdown-item" @click="openEditPaymentModal(payment); closeDropdown()">
-                        <PencilIcon class="dropdown-icon" />
-                        <span>Edit</span>
+                      <button 
+                        class="dropdown-item" 
+                        @click="handleDownloadReceipt(payment); closeDropdown()"
+                        :disabled="payment.review_status !== 'approved' || payment.status !== 'paid'"
+                      >
+                        <ArrowDownTrayIcon class="dropdown-icon" />
+                        <span>Download Receipt</span>
                       </button>
                       <button class="dropdown-item" @click="sharePayment(payment)">
                         <ShareIcon class="dropdown-icon" />
@@ -989,8 +1072,8 @@ onUnmounted(() => {
               <div class="form-group">
                 <label>Status <span class="required">*</span></label>
                 <select v-model="formData.status" required>
+                  <option value="pending">Pending (Not Paid)</option>
                   <option value="paid">Paid</option>
-                  <option value="pending">Pending</option>
                   <option value="overdue">Overdue</option>
                 </select>
               </div>
@@ -1175,6 +1258,27 @@ onUnmounted(() => {
               <h3 class="details-section-title">Notes</h3>
               <div class="detail-item">
                 <span class="detail-value notes-text">{{ selectedPayment.notes }}</span>
+              </div>
+            </div>
+
+            <!-- Approve/Reject Actions -->
+            <div v-if="selectedPayment.review_status === 'pending_review'" class="details-section">
+              <h3 class="details-section-title">Review Payment</h3>
+              <div class="review-actions">
+                <button 
+                  class="approve-btn" 
+                  @click="approvePayment"
+                  :disabled="isSubmitting"
+                >
+                  {{ isSubmitting ? 'Processing...' : 'Approve Payment' }}
+                </button>
+                <button 
+                  class="reject-btn" 
+                  @click="rejectPayment"
+                  :disabled="isSubmitting"
+                >
+                  {{ isSubmitting ? 'Processing...' : 'Reject Payment' }}
+                </button>
               </div>
             </div>
           </div>
@@ -1500,8 +1604,8 @@ onUnmounted(() => {
 }
 
 .status-pending {
-  background: #fef3c7;
-  color: #92400e;
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 .status-overdue {
@@ -1510,8 +1614,8 @@ onUnmounted(() => {
 }
 
 .status-review {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #fed7aa;
+  color: #c2410c;
 }
 
 .actions-cell {
@@ -1582,6 +1686,11 @@ onUnmounted(() => {
 
 .dropdown-item.delete-item:hover {
   background: #fee2e2;
+}
+
+.dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .dropdown-icon {
@@ -1692,6 +1801,7 @@ onUnmounted(() => {
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  font-family: 'Montserrat', sans-serif;
 }
 
 .modal-header {
@@ -1700,6 +1810,7 @@ onUnmounted(() => {
   align-items: center;
   padding: 24px;
   border-bottom: 1px solid #e5e7eb;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .modal-header h2 {
@@ -1707,6 +1818,7 @@ onUnmounted(() => {
   font-size: 24px;
   font-weight: 700;
   color: #1a1a1a;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .close-btn {
@@ -1731,10 +1843,12 @@ onUnmounted(() => {
 /* Payment Form */
 .payment-form {
   padding: 24px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .form-group {
   margin-bottom: 20px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .form-group label {
@@ -1743,6 +1857,7 @@ onUnmounted(() => {
   font-weight: 600;
   color: #1a1a1a;
   font-size: 14px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .required {
@@ -1778,6 +1893,7 @@ onUnmounted(() => {
   margin-top: 4px;
   font-size: 12px;
   color: #dc2626;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .form-row {
@@ -1801,6 +1917,7 @@ onUnmounted(() => {
   font-weight: 600;
   color: #111827;
   margin: 0 0 16px 0;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .type-badge {
@@ -1813,13 +1930,13 @@ onUnmounted(() => {
 }
 
 .type-rent {
-  background: #dbeafe;
-  color: #1e40af;
+  /* No background color */
+  color: #111827;
 }
 
 .type-utility {
-  background: #fef3c7;
-  color: #92400e;
+  /* No background color */
+  color: #111827;
 }
 
 .form-actions {
@@ -1869,25 +1986,30 @@ onUnmounted(() => {
 
 .delete-modal {
   max-width: 500px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .delete-content {
   padding: 24px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .delete-content p {
   margin-bottom: 16px;
   color: #1a1a1a;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .details-modal {
   max-width: 700px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .details-content {
   padding: 24px;
   max-height: 70vh;
   overflow-y: auto;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .details-section {
@@ -1905,6 +2027,7 @@ onUnmounted(() => {
   margin: 0 0 16px 0;
   padding-bottom: 8px;
   border-bottom: 2px solid #e5e7eb;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .details-grid {
@@ -1925,12 +2048,14 @@ onUnmounted(() => {
   color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .detail-value {
   font-size: 14px;
   color: #1a1a1a;
   font-weight: 500;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .detail-value.amount-highlight {
@@ -1975,11 +2100,13 @@ onUnmounted(() => {
   padding: 16px;
   border-radius: 8px;
   margin-top: 16px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .payment-details p {
   margin-bottom: 8px;
   font-size: 14px;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .delete-btn {
@@ -1989,5 +2116,50 @@ onUnmounted(() => {
 
 .delete-btn:hover:not(:disabled) {
   background: #b91c1c;
+}
+
+/* Review Actions */
+.review-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.approve-btn,
+.reject-btn {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'Montserrat', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.approve-btn {
+  background: #10b981;
+  color: white;
+}
+
+.approve-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.reject-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.reject-btn:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.approve-btn:disabled,
+.reject-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
