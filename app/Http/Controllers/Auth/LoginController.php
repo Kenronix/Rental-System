@@ -60,6 +60,7 @@ class LoginController extends Controller
                 'id' => $landlord->id,
                 'name' => $landlord->name,
                 'email' => $landlord->email,
+                'is_admin' => $landlord->is_admin,
             ],
         ]);
     }
@@ -114,6 +115,7 @@ class LoginController extends Controller
                     'id' => $landlord->id,
                     'name' => $landlord->name,
                     'email' => $landlord->email,
+                    'is_admin' => $landlord->is_admin,
                 ],
             ]);
         }

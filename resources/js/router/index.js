@@ -16,9 +16,23 @@ import TenantPayments from '../views/TenantPayments.vue'
 import TenantReports from '../views/TenantReports.vue'
 import TenantAccountSettings from '../views/TenantAccountSettings.vue'
 import TenantApplicationForm from '../views/TenantApplicationForm.vue'
+import AdminLogin from '@/views/admin/AdminLogin.vue'
+import AdminDashboard from '@/views/admin/AdminDashboard.vue'
 import { useAuth } from '../composables/useAuth.js'
 
 const routes = [
+  {
+    path: '/portal-admin/login',
+    name: 'AdminLogin',
+    component: AdminLogin,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/portal-admin/dashboard',
+    name: 'AdminDashboard',
+    component: AdminDashboard,
+    meta: { requiresAuth: true, userType: 'landlord', isAdmin: true }
+  },
   {
     path: '/',
     name: 'LandingPage',
@@ -142,11 +156,11 @@ const router = createRouter({
 
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
-  const { checkAuth, isAuthenticated, userType } = useAuth()
-  
+  const { checkAuth, isAuthenticated, userType, user } = useAuth()
+
   // Check authentication status
   await checkAuth()
-  
+
   // Check if route requires authentication
   if (to.meta.requiresAuth) {
     if (!isAuthenticated.value) {
@@ -154,7 +168,7 @@ router.beforeEach(async (to, from, next) => {
       next({ name: 'LandingPage' })
       return
     }
-    
+
     // Check if user type matches route requirement
     if (to.meta.userType && userType.value !== to.meta.userType) {
       // Wrong user type, redirect to their dashboard
@@ -167,8 +181,19 @@ router.beforeEach(async (to, from, next) => {
       }
       return
     }
+
+    // Check if admin access is required
+    if (to.meta.isAdmin && (!user.value || !user.value.is_admin)) {
+      // Not an admin, redirect to landlord dashboard if they are a landlord, else landing page
+      if (userType.value === 'landlord') {
+        next({ name: 'Dashboard' })
+      } else {
+        next({ name: 'LandingPage' })
+      }
+      return
+    }
   }
-  
+
   // If already authenticated and trying to access landing page, redirect to dashboard
   if (to.name === 'LandingPage' && isAuthenticated.value) {
     if (userType.value === 'landlord') {
@@ -179,7 +204,7 @@ router.beforeEach(async (to, from, next) => {
       return
     }
   }
-  
+
   next()
 })
 

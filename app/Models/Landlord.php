@@ -22,6 +22,7 @@ class Landlord extends Authenticatable
         'password',
         'phone',
         'address',
+        'is_admin',
     ];
 
     /**
@@ -44,6 +45,7 @@ class Landlord extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_admin' => 'boolean',
         ];
     }
 

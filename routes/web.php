@@ -4,9 +4,16 @@ use App\Http\Controllers\Auth\LoginController;
 use Illuminate\Support\Facades\Route;
 
 // API Routes for authentication
+// API Routes for authentication
 Route::post('/api/login', [LoginController::class, 'login']);
 Route::post('/api/logout', [LoginController::class, 'logout']);
 Route::get('/api/user', [LoginController::class, 'user']);
+
+// Admin Routes
+Route::middleware(['auth:landlord', 'admin'])->group(function () {
+    Route::get('/api/admin/dashboard', [\App\Http\Controllers\Admin\SuperAdminController::class, 'dashboard']);
+});
+
 
 // API Routes for properties
 Route::post('/api/properties', [App\Http\Controllers\PropertyController::class, 'store']);
