@@ -19,6 +19,8 @@ import TenantApplicationForm from '../views/TenantApplicationForm.vue'
 import AdminLogin from '../views/AdminLogin.vue'
 import AdminDashboard from '../views/AdminDashboard.vue'
 import AdminProperties from '../views/AdminProperties.vue'
+import PropertyManagerLogin from '../views/PropertyManagerLogin.vue'
+import PropertyManagerDashboard from '../views/PropertyManagerDashboard.vue'
 import { useAuth } from '../composables/useAuth.js'
 
 const routes = [
@@ -183,6 +185,54 @@ const routes = [
     name: 'AdminReports',
     component: AdminDashboard,
     meta: { requiresAuth: true, userType: 'admin' }
+  },
+  {
+    path: '/property-manager/login',
+    name: 'PropertyManagerLogin',
+    component: PropertyManagerLogin,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/property-manager/dashboard',
+    name: 'PropertyManagerDashboard',
+    component: PropertyManagerDashboard,
+    meta: { requiresAuth: true, userType: 'property_manager' }
+  },
+  {
+    path: '/property-manager/properties',
+    name: 'PropertyManagerProperties',
+    component: () => import('../views/PropertyManagerProperties.vue'),
+    meta: { requiresAuth: true, userType: 'property_manager' }
+  },
+  {
+    path: '/property-manager/prop-:id',
+    name: 'PropertyManagerPropertyDetails',
+    component: () => import('../views/PropertyManagerPropertyDetails.vue'),
+    meta: { requiresAuth: true, userType: 'property_manager' }
+  },
+  {
+    path: '/property-manager/landlords',
+    name: 'PropertyManagerLandlords',
+    component: () => import('../views/PropertyManagerLandlords.vue'),
+    meta: { requiresAuth: true, userType: 'property_manager' }
+  },
+  {
+    path: '/property-manager/payments',
+    name: 'PropertyManagerPayments',
+    component: () => import('../views/PropertyManagerPayments.vue'),
+    meta: { requiresAuth: true, userType: 'property_manager' }
+  },
+  {
+    path: '/property-manager/reports',
+    name: 'PropertyManagerReports',
+    component: () => import('../views/PropertyManagerReports.vue'),
+    meta: { requiresAuth: true, userType: 'property_manager' }
+  },
+  {
+    path: '/property-manager/settings',
+    name: 'PropertyManagerSettings',
+    component: () => import('../views/PropertyManagerSettings.vue'),
+    meta: { requiresAuth: true, userType: 'property_manager' }
   }
 ]
 
@@ -194,10 +244,10 @@ const router = createRouter({
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
   const { checkAuth, isAuthenticated, userType } = useAuth()
-  
+
   // Check authentication status
   await checkAuth()
-  
+
   // Check if route requires authentication
   if (to.meta.requiresAuth) {
     if (!isAuthenticated.value) {
@@ -205,7 +255,7 @@ router.beforeEach(async (to, from, next) => {
       next({ name: 'LandingPage' })
       return
     }
-    
+
     // Check if user type matches route requirement
     if (to.meta.userType && userType.value !== to.meta.userType) {
       // Wrong user type, redirect to their dashboard
@@ -215,13 +265,15 @@ router.beforeEach(async (to, from, next) => {
         next({ name: 'TenantDashboard' })
       } else if (userType.value === 'admin') {
         next({ name: 'AdminDashboard' })
+      } else if (userType.value === 'property_manager') {
+        next({ name: 'PropertyManagerDashboard' })
       } else {
         next({ name: 'LandingPage' })
       }
       return
     }
   }
-  
+
   // If already authenticated and trying to access landing page, redirect to dashboard
   if (to.name === 'LandingPage' && isAuthenticated.value) {
     if (userType.value === 'landlord') {
@@ -233,15 +285,24 @@ router.beforeEach(async (to, from, next) => {
     } else if (userType.value === 'admin') {
       next({ name: 'AdminDashboard' })
       return
+    } else if (userType.value === 'property_manager') {
+      next({ name: 'PropertyManagerDashboard' })
+      return
     }
   }
-  
+
   // If admin tries to access login while authenticated, redirect to dashboard
   if (to.name === 'AdminLogin' && isAuthenticated.value && userType.value === 'admin') {
     next({ name: 'AdminDashboard' })
     return
   }
-  
+
+  // If property manager tries to access login while authenticated, redirect to dashboard
+  if (to.name === 'PropertyManagerLogin' && isAuthenticated.value && userType.value === 'property_manager') {
+    next({ name: 'PropertyManagerDashboard' })
+    return
+  }
+
   next()
 })
 
