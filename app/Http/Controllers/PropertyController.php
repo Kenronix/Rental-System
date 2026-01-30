@@ -162,24 +162,23 @@ class PropertyController extends Controller
                         } elseif (!str_starts_with($property->main_photo, '/')) {
                             $property->main_photo = '/' . $property->main_photo;
                         }
-                        // Convert to full URL
-                        $property->main_photo = url($property->main_photo);
+                        
                     }
                 }
                 if ($property->photos && is_array($property->photos)) {
                     $property->photos = array_map(function ($photo) {
                         if (str_starts_with($photo, 'http')) {
-                            // Already a full URL, keep as is
-                            return $photo;
+                            // If absolute URL, extract path
+                            $parsed = parse_url($photo);
+                            return $parsed['path'] ?? '/storage/' . $photo;
                         } else {
                             // Ensure it starts with /storage/
                             if (!str_starts_with($photo, 'storage/') && !str_starts_with($photo, '/storage/')) {
-                                $photo = '/storage/' . $photo;
+                                return '/storage/' . $photo;
                             } elseif (!str_starts_with($photo, '/')) {
-                                $photo = '/' . $photo;
+                                return '/' . $photo;
                             }
-                            // Convert to full URL
-                            return url($photo);
+                            return $photo;
                         }
                     }, $property->photos);
                 }
@@ -365,70 +364,6 @@ class PropertyController extends Controller
             'success' => true,
             'message' => 'Property updated successfully',
             'property' => $property,
-        ]);
-    }
-
-    /**
-     * Get all properties (for admin - shows all properties from all landlords)
-     */
-    public function getAllProperties(Request $request)
-    {
-        $admin = Auth::guard('admin')->user();
-        
-        if (!$admin) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized. Only admins can view all properties.',
-            ], 401);
-        }
-
-        // Get all properties with landlord information
-        $properties = Property::with('landlord:id,name,email')
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($property) {
-                // Convert storage paths to accessible URLs
-                if ($property->main_photo) {
-                    if (str_starts_with($property->main_photo, 'http')) {
-                        // Already a full URL, keep as is
-                    } else {
-                        // Convert to full URL using asset() or Storage::url()
-                        if (str_starts_with($property->main_photo, 'storage/') || str_starts_with($property->main_photo, '/storage/')) {
-                            // Already has storage prefix, just ensure it starts with /
-                            $property->main_photo = str_starts_with($property->main_photo, '/') 
-                                ? $property->main_photo 
-                                : '/' . $property->main_photo;
-                        } else {
-                            // Add storage prefix
-                            $property->main_photo = '/storage/' . $property->main_photo;
-                        }
-                        // Convert to full URL
-                        $property->main_photo = url($property->main_photo);
-                    }
-                }
-                if ($property->photos && is_array($property->photos)) {
-                    $property->photos = array_map(function ($photo) {
-                        if (str_starts_with($photo, 'http')) {
-                            // Already a full URL, keep as is
-                            return $photo;
-                        } else {
-                            // Ensure it has /storage/ prefix
-                            if (!str_starts_with($photo, 'storage/') && !str_starts_with($photo, '/storage/')) {
-                                $photo = '/storage/' . $photo;
-                            } elseif (!str_starts_with($photo, '/')) {
-                                $photo = '/' . $photo;
-                            }
-                            // Convert to full URL
-                            return url($photo);
-                        }
-                    }, $property->photos);
-                }
-                return $property;
-            });
-
-        return response()->json([
-            'success' => true,
-            'properties' => $properties,
         ]);
     }
 }
