@@ -146,25 +146,19 @@ onMounted(() => {
   <div class="dashboard-layout">
     <TenantSidebar />
     <div class="main-content">
-      <!-- Page Title -->
       <h1 class="page-title">Dashboard</h1>
 
-      <!-- Loading State -->
       <div v-if="isLoading" class="loading-state">
         <p>Loading dashboard...</p>
       </div>
 
-      <!-- Error State -->
       <div v-else-if="error" class="error-state">
         <p>{{ error }}</p>
         <button class="retry-btn" @click="fetchDashboardData">Retry</button>
       </div>
 
-      <!-- Dashboard Content -->
       <div v-else class="dashboard-content">
-        <!-- Top Row: Unit Info and Current Balance -->
         <div class="top-row">
-          <!-- Unit 402 Card -->
           <div class="unit-card">
             <div class="unit-header">
               <div class="unit-title-section">
@@ -190,7 +184,6 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Current Balance Card -->
           <div class="balance-card">
             <h3 class="card-title">Current Balance</h3>
             <p class="balance-amount">{{ formatCurrency(currentBalance) }}</p>
@@ -199,7 +192,6 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Middle Row: Utility Bills -->
         <div class="middle-row">
           <div class="utility-bills-card">
             <h3 class="card-title">Utility Bills</h3>
@@ -224,9 +216,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Bottom Row: Payment History and Notifications -->
         <div class="bottom-row">
-          <!-- Payment History Card -->
           <div class="payment-history-card">
             <h3 class="card-title">Payment History</h3>
             <div class="table-container">
@@ -262,7 +252,6 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Notifications Card -->
           <div class="notifications-card">
             <h3 class="card-title">Notifications</h3>
             <div class="notifications-list">
