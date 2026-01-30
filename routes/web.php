@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Admin\AdminController;
 use Illuminate\Support\Facades\Route;
 
 // API Routes for authentication
@@ -65,6 +66,12 @@ Route::get('/api/tenant/notifications', [App\Http\Controllers\TenantNotification
 Route::put('/api/tenant/notifications/{id}/read', [App\Http\Controllers\TenantNotificationsController::class, 'markAsRead']);
 Route::put('/api/tenant/notifications/read-all', [App\Http\Controllers\TenantNotificationsController::class, 'markAllAsRead']);
 Route::get('/api/tenant/receipt/{id}', [App\Http\Controllers\ReceiptController::class, 'generate']);
+
+// Admin API Routes
+Route::post('/api/admin/login', [AdminController::class, 'login']);
+Route::post('/api/admin/logout', [AdminController::class, 'logout']);
+Route::get('/api/admin/user', [AdminController::class, 'user']);
+Route::get('/api/admin/properties', [App\Http\Controllers\PropertyController::class, 'getAllProperties']);
 
 // Catch-all route for Vue.js SPA
 Route::get('/{any}', function () {

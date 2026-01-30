@@ -43,6 +43,7 @@ const logout = async () => {
 export function useAuth() {
   const isLandlord = computed(() => userType.value === 'landlord')
   const isTenant = computed(() => userType.value === 'tenant')
+  const isAdmin = computed(() => userType.value === 'admin')
 
   return {
     user,
@@ -51,6 +52,7 @@ export function useAuth() {
     isLoading,
     isLandlord,
     isTenant,
+    isAdmin,
     checkAuth,
     logout,
   }

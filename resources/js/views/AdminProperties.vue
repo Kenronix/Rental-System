@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import Sidebar from '../components/layout/Sidebar.vue'
+import AdminSidebar from '../components/layout/AdminSidebar.vue'
 import PropertyCard from '../components/rentals/PropertyCard.vue'
 import { PlusIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/vue/24/solid'
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
@@ -17,13 +17,13 @@ const allProperties = ref([])
 const isLoading = ref(false)
 const error = ref(null)
 
-// Fetch properties from database
+// Fetch all properties from all landlords (admin only)
 const fetchProperties = async () => {
   isLoading.value = true
   error.value = null
   
   try {
-    const response = await api.get('/properties')
+    const response = await api.get('/admin/properties')
     
     if (response.data.success) {
       // Transform database properties to match PropertyCard format
@@ -54,7 +54,8 @@ const fetchProperties = async () => {
           type: property.type,
           units: property.units || 0,
           tenants: property.tenants || 0,
-          image: imageUrl
+          image: imageUrl,
+          landlord: property.landlord ? property.landlord.name : 'Unknown'
         }
       })
     }
@@ -119,7 +120,7 @@ const paginationInfo = computed(() => {
 })
 
 const handleAddProperty = () => {
-  router.push('/landlord/properties/add')
+  router.push('/admin/properties/add')
 }
 
 const goToPreviousPage = () => {
@@ -151,7 +152,7 @@ const handleFilterChange = () => {
 
 <template>
   <div class="dashboard-layout">
-    <Sidebar />
+    <AdminSidebar />
     <div class="main-content">
       <!-- Header -->
       <div class="page-header">
@@ -512,3 +513,4 @@ const handleFilterChange = () => {
   background: #0f00cc;
 }
 </style>
+

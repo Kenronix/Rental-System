@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '../components/layout/Sidebar.vue'
+import AdminSidebar from '../components/layout/AdminSidebar.vue'
+
 import { 
   ArrowLeftIcon, 
   PlusIcon,
@@ -16,6 +18,7 @@ import api from '../services/api.js'
 
 const route = useRoute()
 const router = useRouter()
+const isAdmin = computed(() => route.path.startsWith('/admin'))
 
 const property = ref(null)
 const units = ref([])
@@ -116,13 +119,15 @@ const goToUnitsPage = (page) => {
 }
 
 const handleBack = () => {
-  router.push('/landlord/properties')
+  const redirectPath = isAdmin.value ? '/admin/properties' : '/landlord/properties'
+  router.push(redirectPath)
 }
 
 const handleEditProperty = () => {
   // Navigate to edit property page
   if (property.value?.id) {
-    router.push(`/landlord/prop-${property.value.id}/edit`)
+    const prefix = isAdmin.value ? '/admin/prop' : '/landlord/prop'
+    router.push(`${prefix}-${property.value.id}/edit`)
   }
 }
 
@@ -209,7 +214,8 @@ onMounted(() => {
 
 <template>
   <div class="page-container">
-    <Sidebar />
+    <AdminSidebar v-if="isAdmin" />
+    <Sidebar v-else />
     
     <div class="main-content">
       <div class="content-wrapper">

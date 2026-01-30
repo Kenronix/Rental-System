@@ -16,6 +16,9 @@ import TenantPayments from '../views/TenantPayments.vue'
 import TenantReports from '../views/TenantReports.vue'
 import TenantAccountSettings from '../views/TenantAccountSettings.vue'
 import TenantApplicationForm from '../views/TenantApplicationForm.vue'
+import AdminLogin from '../views/AdminLogin.vue'
+import AdminDashboard from '../views/AdminDashboard.vue'
+import AdminProperties from '../views/AdminProperties.vue'
 import { useAuth } from '../composables/useAuth.js'
 
 const routes = [
@@ -132,6 +135,54 @@ const routes = [
     name: 'TenantApplication',
     component: TenantApplicationForm,
     meta: { requiresAuth: false }
+  },
+  {
+    path: '/admin/login',
+    name: 'AdminLogin',
+    component: AdminLogin,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/admin/dashboard',
+    name: 'AdminDashboard',
+    component: AdminDashboard,
+    meta: { requiresAuth: true, userType: 'admin' }
+  },
+  {
+    path: '/admin/properties',
+    name: 'AdminProperties',
+    component: AdminProperties,
+    meta: { requiresAuth: true, userType: 'admin' }
+  },
+  {
+    path: '/admin/properties/add',
+    name: 'AdminAddProperty',
+    component: () => import('../views/LandlordAddnewproperty.vue'),
+    meta: { requiresAuth: true, userType: 'admin' }
+  },
+  {
+    path: '/admin/prop-:id',
+    name: 'AdminPropertyDetails',
+    component: () => import('../views/LandlordPropertiesDetails.vue'),
+    meta: { requiresAuth: true, userType: 'admin' }
+  },
+  {
+    path: '/admin/prop-:id/edit',
+    name: 'AdminEditProperty',
+    component: () => import('../views/LandlordAddnewproperty.vue'),
+    meta: { requiresAuth: true, userType: 'admin' }
+  },
+  {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: AdminDashboard,
+    meta: { requiresAuth: true, userType: 'admin' }
+  },
+  {
+    path: '/admin/reports',
+    name: 'AdminReports',
+    component: AdminDashboard,
+    meta: { requiresAuth: true, userType: 'admin' }
   }
 ]
 
@@ -162,6 +213,8 @@ router.beforeEach(async (to, from, next) => {
         next({ name: 'Dashboard' })
       } else if (userType.value === 'tenant') {
         next({ name: 'TenantDashboard' })
+      } else if (userType.value === 'admin') {
+        next({ name: 'AdminDashboard' })
       } else {
         next({ name: 'LandingPage' })
       }
@@ -177,7 +230,16 @@ router.beforeEach(async (to, from, next) => {
     } else if (userType.value === 'tenant') {
       next({ name: 'TenantDashboard' })
       return
+    } else if (userType.value === 'admin') {
+      next({ name: 'AdminDashboard' })
+      return
     }
+  }
+  
+  // If admin tries to access login while authenticated, redirect to dashboard
+  if (to.name === 'AdminLogin' && isAuthenticated.value && userType.value === 'admin') {
+    next({ name: 'AdminDashboard' })
+    return
   }
   
   next()
