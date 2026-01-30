@@ -4,7 +4,94 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment Receipt</title>
-    <style>
+
+</head>
+<body>
+    <div class="receipt-container">
+        <h1 class="receipt-title">Receipt</h1>
+        
+        <div class="receipt-meta">
+            <p><span class="label">Receipt Number:</span> <span class="value">{{ $receiptNumber }}</span></p>
+            <p><span class="label">Date:</span> <span class="value">{{ $paymentDate }}</span></p>
+            @if($payment->due_date)
+            <p><span class="label">Due date:</span> <span class="value">{{ $payment->due_date->format('F d, Y') }}</span></p>
+            @endif
+        </div>
+        
+        <div class="bill-to">Bill to:</div>
+        <div class="bill-to-content">
+            <p><span class="label">Customer Name:</span> <span class="value">{{ $tenant->name }}</span></p>
+            <p><span class="label">Address:</span> <span class="value">{{ $property->street_address }}, {{ $property->city }}, {{ $property->state }} {{ $property->zip_code }}</span></p>
+            <p><span class="label">Property:</span> <span class="value">{{ $property->name }} – Unit {{ $unit->unit_number }}</span></p>
+        </div>
+        
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Price</th>
+                    <th>Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if($payment->payment_type === 'rent')
+                    <tr>
+                        <td>Rent Payment</td>
+                        <td>Php {{ number_format($payment->amount, 2) }}</td>
+                        <td>Php {{ number_format($payment->amount, 2) }}</td>
+                    </tr>
+                @elseif($payment->payment_type === 'utility')
+                    @if($payment->water && $payment->water > 0)
+                    <tr>
+                        <td>Water</td>
+                        <td>Php {{ number_format($payment->water, 2) }}</td>
+                        <td>Php {{ number_format($payment->water, 2) }}</td>
+                    </tr>
+                    @endif
+                    @if($payment->electricity && $payment->electricity > 0)
+                    <tr>
+                        <td>Electricity</td>
+                        <td>Php {{ number_format($payment->electricity, 2) }}</td>
+                        <td>Php {{ number_format($payment->electricity, 2) }}</td>
+                    </tr>
+                    @endif
+                    @if($payment->internet && $payment->internet > 0)
+                    <tr>
+                        <td>Internet</td>
+                        <td>Php {{ number_format($payment->internet, 2) }}</td>
+                        <td>Php {{ number_format($payment->internet, 2) }}</td>
+                    </tr>
+                    @endif
+                @endif
+            </tbody>
+        </table>
+        
+        <div class="totals-wrap">
+            <div class="totals-row">
+                <span class="label">Subtotal:</span>
+                <span class="value">Php {{ number_format($totalAmount, 2) }}</span>
+            </div>
+            <div class="totals-row total-row">
+                <span class="label">Total:</span>
+                <span class="value">Php {{ number_format($totalAmount, 2) }}</span>
+            </div>
+        </div>
+        
+        <div class="receipt-footer">
+            <p><span class="label">Status:</span> <span class="value">Paid</span></p>
+            @if($payment->payment_method)
+            <p><span class="label">Payment Method:</span> <span class="value">{{ ucfirst(str_replace('_', ' ', $payment->payment_method)) }}</span></p>
+            @endif
+            @if($payment->reference_number)
+            <p><span class="label">Reference Number:</span> <span class="value">{{ $payment->reference_number }}</span></p>
+            @endif
+            <p style="margin-top: 12px; font-size: 11px; font-weight: 400;">This is an official receipt. Please keep for your records.</p>
+        </div>
+    </div>
+</body>
+</html>
+
+<style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
         
         * {
@@ -159,88 +246,3 @@
             }
         }
     </style>
-</head>
-<body>
-    <div class="receipt-container">
-        <h1 class="receipt-title">Receipt</h1>
-        
-        <div class="receipt-meta">
-            <p><span class="label">Receipt Number:</span> <span class="value">{{ $receiptNumber }}</span></p>
-            <p><span class="label">Date:</span> <span class="value">{{ $paymentDate }}</span></p>
-            @if($payment->due_date)
-            <p><span class="label">Due date:</span> <span class="value">{{ $payment->due_date->format('F d, Y') }}</span></p>
-            @endif
-        </div>
-        
-        <div class="bill-to">Bill to:</div>
-        <div class="bill-to-content">
-            <p><span class="label">Customer Name:</span> <span class="value">{{ $tenant->name }}</span></p>
-            <p><span class="label">Address:</span> <span class="value">{{ $property->street_address }}, {{ $property->city }}, {{ $property->state }} {{ $property->zip_code }}</span></p>
-            <p><span class="label">Property:</span> <span class="value">{{ $property->name }} – Unit {{ $unit->unit_number }}</span></p>
-        </div>
-        
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th>Description</th>
-                    <th>Price</th>
-                    <th>Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if($payment->payment_type === 'rent')
-                    <tr>
-                        <td>Rent Payment</td>
-                        <td>Php {{ number_format($payment->amount, 2) }}</td>
-                        <td>Php {{ number_format($payment->amount, 2) }}</td>
-                    </tr>
-                @elseif($payment->payment_type === 'utility')
-                    @if($payment->water && $payment->water > 0)
-                    <tr>
-                        <td>Water</td>
-                        <td>Php {{ number_format($payment->water, 2) }}</td>
-                        <td>Php {{ number_format($payment->water, 2) }}</td>
-                    </tr>
-                    @endif
-                    @if($payment->electricity && $payment->electricity > 0)
-                    <tr>
-                        <td>Electricity</td>
-                        <td>Php {{ number_format($payment->electricity, 2) }}</td>
-                        <td>Php {{ number_format($payment->electricity, 2) }}</td>
-                    </tr>
-                    @endif
-                    @if($payment->internet && $payment->internet > 0)
-                    <tr>
-                        <td>Internet</td>
-                        <td>Php {{ number_format($payment->internet, 2) }}</td>
-                        <td>Php {{ number_format($payment->internet, 2) }}</td>
-                    </tr>
-                    @endif
-                @endif
-            </tbody>
-        </table>
-        
-        <div class="totals-wrap">
-            <div class="totals-row">
-                <span class="label">Subtotal:</span>
-                <span class="value">Php {{ number_format($totalAmount, 2) }}</span>
-            </div>
-            <div class="totals-row total-row">
-                <span class="label">Total:</span>
-                <span class="value">Php {{ number_format($totalAmount, 2) }}</span>
-            </div>
-        </div>
-        
-        <div class="receipt-footer">
-            <p><span class="label">Status:</span> <span class="value">Paid</span></p>
-            @if($payment->payment_method)
-            <p><span class="label">Payment Method:</span> <span class="value">{{ ucfirst(str_replace('_', ' ', $payment->payment_method)) }}</span></p>
-            @endif
-            @if($payment->reference_number)
-            <p><span class="label">Reference Number:</span> <span class="value">{{ $payment->reference_number }}</span></p>
-            @endif
-            <p style="margin-top: 12px; font-size: 11px; font-weight: 400;">This is an official receipt. Please keep for your records.</p>
-        </div>
-    </div>
-</body>
-</html>

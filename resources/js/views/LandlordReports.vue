@@ -2,12 +2,7 @@
 import { ref, computed, onMounted, onActivated, onUnmounted } from 'vue'
 import { Teleport } from 'vue'
 import Sidebar from '../components/layout/Sidebar.vue'
-import { 
-  MagnifyingGlassIcon,
-  CalendarIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon
-} from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, CalendarIcon, ChevronLeftIcon, ChevronRightIcon} from '@heroicons/vue/24/outline'
 import { ChevronDownIcon } from '@heroicons/vue/24/solid'
 import { ArrowDownTrayIcon } from '@heroicons/vue/24/solid'
 import api from '../services/api.js'
