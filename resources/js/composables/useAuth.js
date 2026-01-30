@@ -44,6 +44,7 @@ export function useAuth() {
   const isLandlord = computed(() => userType.value === 'landlord')
   const isTenant = computed(() => userType.value === 'tenant')
   const isAdmin = computed(() => userType.value === 'admin')
+  const isPropertyManager = computed(() => userType.value === 'property_manager')
 
   return {
     user,
@@ -53,6 +54,7 @@ export function useAuth() {
     isLandlord,
     isTenant,
     isAdmin,
+    isPropertyManager,
     checkAuth,
     logout,
   }

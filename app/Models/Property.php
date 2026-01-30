@@ -50,4 +50,12 @@ class Property extends Model
     {
         return $this->belongsTo(Landlord::class);
     }
+
+    /**
+     * Get the units for the property.
+     */
+    public function units(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Unit::class);
+    }
 }

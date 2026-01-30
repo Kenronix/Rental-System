@@ -52,6 +52,10 @@ return [
             'driver' => 'session',
             'provider' => 'admins',
         ],
+        'property_manager' => [
+            'driver' => 'session',
+            'provider' => 'property_managers',
+        ],
     ],
 
     /*
@@ -87,6 +91,10 @@ return [
         'admins' => [
             'driver' => 'eloquent',
             'model' => App\Models\Admin::class,
+        ],
+        'property_managers' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\PropertyManager::class,
         ],
 
         // 'users' => [

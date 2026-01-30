@@ -73,6 +73,14 @@ Route::post('/api/admin/logout', [AdminController::class, 'logout']);
 Route::get('/api/admin/user', [AdminController::class, 'user']);
 Route::get('/api/admin/properties', [App\Http\Controllers\PropertyController::class, 'getAllProperties']);
 
+// Property Manager API Routes
+Route::get('/api/property-manager/dashboard', [App\Http\Controllers\PropertyManagerDashboardController::class, 'index']);
+Route::get('/api/property-manager/properties', [App\Http\Controllers\PropertyManagerDashboardController::class, 'getProperties']);
+Route::get('/api/property-manager/properties/{id}', [App\Http\Controllers\PropertyManagerDashboardController::class, 'show']);
+Route::get('/api/property-manager/landlords', [App\Http\Controllers\PropertyManagerDashboardController::class, 'getLandlords']);
+Route::get('/api/property-manager/payments', [App\Http\Controllers\PropertyManagerDashboardController::class, 'getPayments']);
+Route::get('/api/property-manager/reports', [App\Http\Controllers\PropertyManagerDashboardController::class, 'getReports']);
+
 // Catch-all route for Vue.js SPA
 Route::get('/{any}', function () {
     return view('welcome');

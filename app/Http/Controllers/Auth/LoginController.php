@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Landlord;
 use App\Models\Tenant;
 use App\Models\Admin;
+use App\Models\PropertyManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -21,11 +22,13 @@ class LoginController extends Controller
         $request->validate([
             'email' => 'required|email',
             'password' => 'required',
-            'userType' => 'required|in:landlord,tenant',
+            'userType' => 'required|in:landlord,tenant,property_manager',
         ]);
 
         if ($request->userType === 'landlord') {
             return $this->loginLandlord($request);
+        } elseif ($request->userType === 'property_manager') {
+            return $this->loginPropertyManager($request);
         } else {
             return $this->loginTenant($request);
         }
@@ -61,6 +64,40 @@ class LoginController extends Controller
                 'id' => $landlord->id,
                 'name' => $landlord->name,
                 'email' => $landlord->email,
+            ],
+        ]);
+    }
+
+    /**
+     * Handle property manager login
+     */
+    private function loginPropertyManager(Request $request)
+    {
+        $manager = PropertyManager::where('email', $request->email)->first();
+
+        if (!$manager) {
+            throw ValidationException::withMessages([
+                'email' => ['No property manager account found with this email address.'],
+            ]);
+        }
+
+        if (!Hash::check($request->password, $manager->password)) {
+            throw ValidationException::withMessages([
+                'email' => ['The provided credentials are incorrect.'],
+            ]);
+        }
+
+        // Log in the property manager
+        Auth::guard('property_manager')->login($manager, $request->boolean('remember'));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful',
+            'userType' => 'property_manager',
+            'user' => [
+                'id' => $manager->id,
+                'name' => $manager->name,
+                'email' => $manager->email,
             ],
         ]);
     }
@@ -144,6 +181,20 @@ class LoginController extends Controller
             ]);
         }
 
+        $propertyManager = Auth::guard('property_manager')->user();
+
+        if ($propertyManager) {
+            return response()->json([
+                'authenticated' => true,
+                'userType' => 'property_manager',
+                'user' => [
+                    'id' => $propertyManager->id,
+                    'name' => $propertyManager->name,
+                    'email' => $propertyManager->email,
+                ],
+            ]);
+        }
+
         return response()->json([
             'authenticated' => false,
             'userType' => null,
@@ -160,6 +211,7 @@ class LoginController extends Controller
         Auth::guard('admin')->logout();
         Auth::guard('landlord')->logout();
         Auth::guard('tenant')->logout();
+        Auth::guard('property_manager')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
