@@ -8,15 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('tenant_applications', function (Blueprint $table) {
-            $table->integer('number_of_people')->default(1)->after('address');
-        });
+        if (!Schema::hasColumn('tenant_applications', 'number_of_people')) {
+            Schema::table('tenant_applications', function (Blueprint $table) {
+                $table->integer('number_of_people')->default(1)->after('address');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('tenant_applications', function (Blueprint $table) {
-            $table->dropColumn('number_of_people');
-        });
+        if (Schema::hasColumn('tenant_applications', 'number_of_people')) {
+            Schema::table('tenant_applications', function (Blueprint $table) {
+                $table->dropColumn('number_of_people');
+            });
+        }
     }
 };

@@ -6,7 +6,9 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
         if (!Schema::hasTable('units')) {
@@ -16,25 +18,29 @@ return new class extends Migration
                 $table->string('unit_number');
                 $table->string('unit_type');
                 $table->integer('bedrooms');
-                $table->integer('bathrooms');
-                $table->integer('square_footage')->nullable();
-                $table->integer('monthly_rent');
-                $table->integer('security_deposit');
-                $table->integer('advance_deposit');
-                $table->text('description');
+                $table->decimal('bathrooms', 2, 1);
+                $table->integer('square_footage');
+                $table->decimal('monthly_rent', 10, 2);
+                $table->decimal('security_deposit', 10, 2);
+                $table->decimal('advance_deposit', 10, 2);
+                $table->text('description')->nullable();
                 $table->json('photos')->nullable();
-                $table->enum('status', ['active', 'inactive', 'vacant'])->default('active');
+                $table->enum('status', ['available', 'occupied', 'maintenance'])->default('available');
                 $table->boolean('is_occupied')->default(false);
                 $table->foreignId('tenant_id')->nullable()->constrained('tenants')->onDelete('set null');
                 $table->date('lease_start')->nullable();
                 $table->date('lease_end')->nullable();
                 $table->integer('lease_duration')->nullable();
-                $table->integer('lease_amount')->nullable();
-                $table->integer('lease_deposit')->nullable();
+                $table->decimal('lease_amount', 10, 2)->nullable();
+                $table->decimal('lease_deposit', 10, 2)->nullable();
                 $table->timestamps();
             });
         }
     }
+
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
         Schema::dropIfExists('units');
