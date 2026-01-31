@@ -60,6 +60,7 @@ import { useRouter } from 'vue-router'
 import { EnvelopeIcon, LockClosedIcon } from '@heroicons/vue/24/outline'
 import api from '../services/api.js'
 import { useAuth } from '../composables/useAuth.js'
+import landingPageImage from '../images/landingPage.png'
 
 const router = useRouter()
 const { checkAuth } = useAuth()
@@ -119,7 +120,10 @@ const handleLogin = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background-image: url('../images/landingPage.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   padding: 20px;
 }
 
